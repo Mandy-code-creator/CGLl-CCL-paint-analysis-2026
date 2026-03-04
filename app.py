@@ -117,17 +117,17 @@ if 'saved_data' in st.session_state:
         st.plotly_chart(fig3, use_container_width=True)
 
         # =============================
-      # =============================
+     # =============================
         # 5. CONCLUSION (OBJECTIVE YIELD INSIGHTS)
         # =============================
         st.divider()
-        st.subheader("💡 4. Executive Summary & Yield Insights")
+        st.subheader("💡 4. 執行摘要與產出分析 (Executive Summary & Yield Insights)")
         
-        # Tính toán tổng hợp
+        # Calculate totals
         total_input = df_summary_disp['CGL (m)'].sum()
         total_output = df_summary_disp['CCL (m)'].sum()
         
-        # Tách hai loại chênh lệch: Giãn dài (Positive) và Hụt mét (Negative)
+        # Separate positive and negative delta
         elongation_df = df_summary_disp[df_summary_disp['Delta (m)'] > 0]
         shortage_df = df_summary_disp[df_summary_disp['Delta (m)'] < 0]
         
@@ -135,30 +135,30 @@ if 'saved_data' in st.session_state:
         total_shortage_area = abs(shortage_df['Extra Area (m2)'].sum()) if not shortage_df.empty else 0
 
         st.markdown(f"""
-        **Overall Production Metrics:**
-        * **Input vs Output:** Processed **{total_input:,.0f} m** (CGL) to produce **{total_output:,.0f} m** (CCL).
-        * 📈 **Positive Elongation:** **{total_elong_area:,.2f} m²** of extra surface area created due to steel stretching. This directly represents extra paint consumption.
-        * 📉 **Length Shortfall:** **{total_shortage_area:,.2f} m²** of equivalent area where the output length was less than the input. The exact cause (sensor variance, unrecorded scrap, or sample cuts) requires further investigation.
+        **整體生產指標 (Overall Production Metrics):**
+        * **投入與產出 (Input vs Output):** 投入 **{total_input:,.0f} m** (CGL) 的鋼捲，產出 **{total_output:,.0f} m** (CCL) 的成品。
+        * 📈 **正向延展 (Positive Elongation):** 鋼帶延展產生了 **{total_elong_area:,.2f} m²** 的額外表面積。這直接代表了額外的油漆消耗。
+        * 📉 **長度短缺 (Length Shortfall):** 產出長度小於投入長度，相當於 **{total_shortage_area:,.2f} m²** 的面積短缺。確切原因（感測器誤差、未記錄的廢料或抽樣裁切）需要進一步調查。
         """)
 
-        # Hiển thị 2 đơn hàng có độ lệch lớn nhất theo hướng khách quan
+        # Display top variances objectively
         col1, col2 = st.columns(2)
         
         with col1:
-            st.markdown("🔴 **Top Positive Elongation (Giãn dài nhiều nhất):**")
+            st.markdown("🔴 **最大正向延展 (Top Positive Elongation):**")
             if not elongation_df.empty:
                 worst_elong = elongation_df.sort_values(by='Extra Area (m2)', ascending=False).iloc[0]
-                st.info(f"Order **`{worst_elong['Order']}`** stretched by {worst_elong['Delta (m)']:,.0f} m, generating **{worst_elong['Extra Area (m2)']:,.2f} m²** of extra painted area.")
+                st.info(f"訂單 **`{worst_elong['Order']}`** 延展了 {worst_elong['Delta (m)']:,.0f} m，產生了 **{worst_elong['Extra Area (m2)']:,.2f} m²** 的額外塗漆面積。")
             else:
-                st.success("No significant elongation detected.")
+                st.success("未檢測到明顯的延展現象 (No significant elongation detected).")
                 
         with col2:
-            st.markdown("🟠 **Top Length Shortfall (Hụt mét chưa rõ nguyên nhân):**")
+            st.markdown("🟠 **最大長度短缺 (Top Length Shortfall):**")
             if not shortage_df.empty:
-                worst_short = shortage_df.sort_values(by='Extra Area (m2)', ascending=True).iloc[0] # Lấy số âm lớn nhất
-                st.warning(f"Order **`{worst_short['Order']}`** fell short by {abs(worst_short['Delta (m)']):,.0f} m, representing an unexplained area variance of **{abs(worst_short['Extra Area (m2)']):,.2f} m²**.")
+                worst_short = shortage_df.sort_values(by='Extra Area (m2)', ascending=True).iloc[0] # Gets the largest negative value
+                st.warning(f"訂單 **`{worst_short['Order']}`** 短缺了 {abs(worst_short['Delta (m)']):,.0f} m，代表有 **{abs(worst_short['Extra Area (m2)']):,.2f} m²** 的不明面積差異。")
             else:
-                st.success("No significant length shortage detected.")
+                st.success("未檢測到明顯的長度短缺 (No significant length shortage detected).")
         # =============================
         # 6. EXCEL EXPORT
         # =============================
