@@ -22,11 +22,6 @@ if uploaded_file is not None:
         else:
             df_temp = pd.read_excel(uploaded_file) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file)
             
-        # ==========================================
-        # DÒNG LỆNH MA THUẬT: XÓA SẠCH KHOẢNG TRẮNG TRONG TÊN CỘT
-        # ==========================================
-        df_temp.columns = df_temp.columns.str.replace(r'\s+', '', regex=True)
-        
         st.session_state['saved_data'] = df_temp 
         st.success("Data loaded successfully!")
     except Exception as e:
@@ -35,10 +30,10 @@ if uploaded_file is not None:
 if 'saved_data' in st.session_state:
     df = st.session_state['saved_data'].copy()
     
-    # --- CÁC BIẾN NÀY GIỜ ĐÃ AN TOÀN VÌ KHOẢNG TRẮNG ĐÃ BỊ XÓA ---
+    # --- CẬP NHẬT TÊN CỘT CHÍNH XÁC TỪ ẢNH CỦA BẠN ---
     order_col = "訂單號碼"
     mother_coil_col = "投入鋼捲號碼"
-    baby_coil_col = "產出鋼捲號碼" 
+    baby_coil_col = "產出鋼捲號碼" # <-- Đã sửa tên cột chính xác ở đây!
     
     cgl_thick = "镀锌實測厚度"
     cgl_width = "镀锌測寬度"
@@ -50,18 +45,21 @@ if 'saved_data' in st.session_state:
 
     try:
         with st.spinner('Processing and aggregating data...'):
+            # Step 1: Group by Mother Coil
             step1_agg = {
                 cgl_thick: 'first', cgl_width: 'first', cgl_len: 'first',
                 ccl_thick: 'mean', ccl_width: 'mean', ccl_len: 'sum'
             }
             df_step1 = df.groupby([order_col, mother_coil_col]).agg(step1_agg).reset_index()
 
+            # Step 2: Group by Order
             step2_agg = {
                 cgl_thick: 'mean', cgl_width: 'mean', cgl_len: 'sum',
                 ccl_thick: 'mean', ccl_width: 'mean', ccl_len: 'sum'
             }
             df_summary = df_step1.groupby(order_col).agg(step2_agg).reset_index()
 
+            # Rename and calculate variances
             df_summary.rename(columns={cgl_len: 'CGL_Total_Length', ccl_len: 'CCL_Total_Length'}, inplace=True)
             df_summary['Delta_Length'] = df_summary['CCL_Total_Length'] - df_summary['CGL_Total_Length']
             df_summary['Thickness_Variance'] = df_summary[ccl_thick] - df_summary[cgl_thick]
@@ -105,12 +103,14 @@ if 'saved_data' in st.session_state:
             df_detail['Thickness_Variance'] = df_detail[ccl_thick] - df_detail[cgl_thick]
             
             try:
+                # Bảng chi tiết bây giờ sẽ chỉ hiện đúng 6 cột này
                 detail_display_cols = [
                     mother_coil_col, baby_coil_col, 
                     cgl_thick, ccl_thick, 'Thickness_Variance', ccl_len
                 ]
                 df_detail_display = df_detail[detail_display_cols].sort_values(by=mother_coil_col).copy()
                 
+                # Đổi tên cột sang tiếng Anh cho gọn gàng và chuyên nghiệp
                 df_detail_display.columns = [
                     'Mother Coil', 'Baby Coil', 
                     'CGL Thickness', 'CCL Thickness', 'Thickness Variance', 'CCL Length (m)'
@@ -124,7 +124,7 @@ if 'saved_data' in st.session_state:
 
     except KeyError as e:
         st.error(f"Missing column in your file: {e}")
-        st.info("Lỗi do tên cột. Dù đã xóa khoảng trắng, vui lòng kiểm tra xem tên các cột trong file có đúng ký tự tiếng Trung này không.")
+        st.info("Please ensure the uploaded file contains the correct column names.")
     except Exception as e:
         st.error(f"An unexpected error occurred: {e}")
 
