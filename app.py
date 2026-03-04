@@ -71,42 +71,64 @@ if 'saved_data' in st.session_state:
             df_summary['Extra_Area_m2'] = (df_summary[ccl_width] / 1000) * df_summary['Delta_m']
 
         # =============================
-       # =============================
-        # 3. TABLES
+        # 3. TABLES (ĐÃ SỬA FORMAT SỐ THẬP PHÂN)
         # =============================
         st.subheader("1. Order Summary")
         disp_cols = [order_col, 'Mother_Count', 'CGL_Total', 'CCL_Total', 'Delta_m', 'Thick_Var_mm', 'Extra_Area_m2']
         df_summary_disp = df_summary[disp_cols].sort_values(by='Extra_Area_m2', ascending=False).copy()
         df_summary_disp.columns = ['Order', 'Mothers', 'CGL (m)', 'CCL (m)', 'Delta (m)', 'Thick Var (mm)', 'Extra Area (m2)']
         
-        # 1. Bỏ số thập phân cho các dữ liệu tổng (làm tròn và ép kiểu về số nguyên int)
+        # Làm tròn và ép kiểu số nguyên cho số lượng và chiều dài
         df_summary_disp['Mothers'] = df_summary_disp['Mothers'].astype(int)
         df_summary_disp['CGL (m)'] = df_summary_disp['CGL (m)'].round(0).astype(int)
         df_summary_disp['CCL (m)'] = df_summary_disp['CCL (m)'].round(0).astype(int)
         
-        # 2. Giữ lại số thập phân cho các cột tính chênh lệch
-        df_summary_disp['Delta (m)'] = df_summary_disp['Delta (m)'].round(2)
-        df_summary_disp['Thick Var (mm)'] = df_summary_disp['Thick Var (mm)'].round(3) # Độ dày cần 3 số thập phân
-        df_summary_disp['Extra Area (m2)'] = df_summary_disp['Extra Area (m2)'].round(2)
-
-        # 3. Thêm cột Số Thứ Tự (STT) vào vị trí đầu tiên (vị trí 0)
+        # Thêm cột STT
         df_summary_disp.insert(0, 'STT', range(1, len(df_summary_disp) + 1))
-        
-        # 4. Hiển thị bảng: Dùng hàm set_index('STT') để giấu cột index mặc định của Pandas
-        st.table(df_summary_disp.set_index('STT')) 
+        df_summary_disp = df_summary_disp.set_index('STT')
+
+        # ÉP ĐỊNH DẠNG: Chỉ hiện đúng 2 số thập phân (riêng độ dày giữ 3 số vì nó rất nhỏ)
+        styled_summary = df_summary_disp.style.format({
+            "Delta (m)": "{:.2f}",
+            "Thick Var (mm)": "{:.3f}", 
+            "Extra Area (m2)": "{:.2f}"
+        })
+        st.table(styled_summary) 
 
         st.divider()
         st.subheader("2. Baby Coil Details")
         selected_order = st.selectbox("Select Order Number:", options=df[order_col].unique())
 
+        df_detail_final = None
+        if selected_order:
+            row = df_summary[df_summary[order_col] == selected_order].iloc[0]
+            st.markdown(f"**Performance for Order: {selected_order} ({int(row['Mother_Count'])} Mother Coils)**")
+            c1, c2, c3 = st.columns(3)
+            c1.metric("CGL Total (Input)", f"{row['CGL_Total']:,.0f} m")
+            c2.metric("CCL Total (Output)", f"{row['CCL_Total']:,.0f} m")
+            c3.metric("Elongation (Delta)", f"{row['Delta_m']:,.0f} m", delta=f"{row['Delta_m']:,.0f} m", delta_color="inverse")
+            
+            df_detail = df[df[order_col] == selected_order].copy()
+            df_detail['Thickness_Variance'] = df_detail[ccl_thick] - df_detail[cgl_thick]
+            d_cols = [mother_col, baby_col, cgl_thick, ccl_thick, 'Thickness_Variance', ccl_len]
+            df_detail_final = df_detail[d_cols].sort_values(by=mother_col).copy()
+            df_detail_final.columns = ['Mother Coil', 'Baby Coil', 'CGL Thick', 'CCL Thick', 'Var (mm)', 'CCL Len (m)']
+            
+            # Ép định dạng 3 số thập phân cho bảng chi tiết độ dày
+            styled_detail = df_detail_final.style.format({
+                "CGL Thick": "{:.3f}",
+                "CCL Thick": "{:.3f}",
+                "Var (mm)": "{:.3f}",
+                "CCL Len (m)": "{:.0f}"
+            })
+            st.table(styled_detail)
+
         # =============================
-        # =============================
-        # 4. VISUAL ANALYSIS (WITH AUTOMATED INSIGHTS)
+        # 4. VISUAL ANALYSIS
         # =============================
         st.divider()
         st.subheader("3. 視覺化分析與結論 (Visual Analysis & Insights)")
         
-        # --- Chart 1: Bar Chart ---
         st.markdown("#### 3.1 各訂單額外塗漆面積 (Extra Painted Area per Order)")
         fig1 = px.bar(df_summary_disp, x='Order', y='Extra Area (m2)', color='Delta (m)', text='Extra Area (m2)', title="Extra Painted Area per Order")
         st.plotly_chart(fig1, use_container_width=True)
@@ -118,7 +140,6 @@ if 'saved_data' in st.session_state:
         * **結論 (Conclusion):** 管理層應優先調查具有最深藍色/最長柱體的訂單，以找出材料流失的根本原因。
         """)
 
-        # --- Chart 2: Histogram ---
         st.markdown("#### 3.2 長度差異分佈圖 (Distribution of Length Variance)")
         fig2 = px.histogram(df_summary_disp, x='Delta (m)', nbins=20, title="Distribution of Elongation (CCL - CGL)")
         st.plotly_chart(fig2, use_container_width=True)
@@ -130,29 +151,26 @@ if 'saved_data' in st.session_state:
         * **結論 (Conclusion):** 若發現有訂單落在常態分佈之外（例如短缺超過 -1500m），QC 與生產單位必須立即介入，檢查機台張力設定或廢料記錄流程。
         """)
 
-        # --- Chart 3: Scatter Plot ---
         st.markdown("#### 3.3 厚度差異 vs. 長度差異 (Thickness vs Length Variance)")
         fig3 = px.scatter(df_summary, x='Thick_Var_mm', y='Delta_m', color='Extra_Area_m2', hover_data=[order_col], title="Thickness Variance vs Length Delta")
         st.plotly_chart(fig3, use_container_width=True)
         st.success("""
         **📊 圖表意義 (Chart Insight):**
-        * 探索「厚度變化」是否為導致「長度變化」的原因。
-        * **X軸 (Thick_Var_mm):** 鍍鋅(CGL)與彩塗(CCL)之間的厚度差。
-        * **Y軸 (Delta_m):** 最終的長度差異。
-        * **結論 (Conclusion):** 如果數據點呈現明顯的左上至右下趨勢（或相反），則證實厚度變薄會導致鋼捲被拉長。若無明顯趨勢，則長度異常可能純粹來自設備測量誤差。
+        * 此散佈圖旨在分析「厚度變化」是否與「長度流失」有直接物理關聯。
+        * **X軸 (Thick_Var_mm):** 塗漆前後的厚度差（約 0.02mm - 0.09mm，通常為正常的漆膜增加厚度）。
+        * **Y軸 (Delta_m):** 長度短缺的嚴重程度（向下延伸至 -4500m）。
+        * **結論 (Conclusion):** 數據點呈現水平隨機散佈，缺乏明顯的線性趨勢。這強烈暗示那些數千米的嚴重長度短缺（圖表底部的點）**並非源於鋼帶物理變形**。管理層應將調查重點轉向操作面，例如：大量切邊廢料未記錄、CGL/CCL 設備計數器誤差，或資料輸入遺漏。
         """)
+
         # =============================
-     # =============================
-        # 5. CONCLUSION (OBJECTIVE YIELD INSIGHTS)
+        # 5. CONCLUSION
         # =============================
         st.divider()
         st.subheader("💡 4. 執行摘要與產出分析 (Executive Summary & Yield Insights)")
         
-        # Calculate totals
         total_input = df_summary_disp['CGL (m)'].sum()
         total_output = df_summary_disp['CCL (m)'].sum()
         
-        # Separate positive and negative delta
         elongation_df = df_summary_disp[df_summary_disp['Delta (m)'] > 0]
         shortage_df = df_summary_disp[df_summary_disp['Delta (m)'] < 0]
         
@@ -166,7 +184,6 @@ if 'saved_data' in st.session_state:
         * 📉 **長度短缺 (Length Shortfall):** 產出長度小於投入長度，相當於 **{total_shortage_area:,.2f} m²** 的面積短缺。確切原因（感測器誤差、未記錄的廢料或抽樣裁切）需要進一步調查。
         """)
 
-        # Display top variances objectively
         col1, col2 = st.columns(2)
         
         with col1:
@@ -180,21 +197,71 @@ if 'saved_data' in st.session_state:
         with col2:
             st.markdown("🟠 **最大長度短缺 (Top Length Shortfall):**")
             if not shortage_df.empty:
-                worst_short = shortage_df.sort_values(by='Extra Area (m2)', ascending=True).iloc[0] # Gets the largest negative value
+                worst_short = shortage_df.sort_values(by='Extra Area (m2)', ascending=True).iloc[0]
                 st.warning(f"訂單 **`{worst_short['Order']}`** 短缺了 {abs(worst_short['Delta (m)']):,.0f} m，代表有 **{abs(worst_short['Extra Area (m2)']):,.2f} m²** 的不明面積差異。")
             else:
                 st.success("未檢測到明顯的長度短缺 (No significant length shortage detected).")
+
         # =============================
-        # 6. EXCEL EXPORT
+        # 6. EXCEL EXPORT (ĐÃ MANG RA MÀN HÌNH CHÍNH)
         # =============================
         excel_data = io.BytesIO()
         with pd.ExcelWriter(excel_data, engine='xlsxwriter') as writer:
-            df_summary_disp.to_excel(writer, sheet_name='Summary', index=False)
+            # Lưu ý: file excel tải về cũng sẽ được làm tròn số cho đẹp
+            df_summary_export = df_summary_disp.copy()
+            df_summary_export['Delta (m)'] = df_summary_export['Delta (m)'].round(2)
+            df_summary_export['Extra Area (m2)'] = df_summary_export['Extra Area (m2)'].round(2)
+            df_summary_export.to_excel(writer, sheet_name='Summary')
+            
             if df_detail_final is not None:
                 df_detail_final.to_excel(writer, sheet_name='Details', index=False)
-        st.sidebar.download_button("📥 Download Excel Report", data=excel_data.getvalue(), file_name="Paint_Yield_Report.xlsx")
+        
+        st.divider()
+        st.subheader("📥 5. 匯出資料 (Export Report to Excel)")
+        st.markdown("Bấm vào nút bên dưới để tải toàn bộ bảng tổng hợp và chi tiết về máy:")
+        
+        st.download_button(
+            label="👉 TẢI XUỐNG FILE EXCEL 👈", 
+            data=excel_data.getvalue(), 
+            file_name="Paint_Yield_Report.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            type="primary" # Nút sẽ có màu đỏ/xanh nổi bật
+        )
 
     except Exception as e:
         st.error(f"Logic Error: {e}")
 else:
     st.info("👆 Please upload your data file to start.")
+    # =============================
+        # 7. PDF EXPORT (NÚT IN BÁO CÁO)
+        # =============================
+        st.divider()
+        st.subheader("🖨️ 6. 匯出 PDF (Export to PDF)")
+        st.markdown("Bấm nút bên dưới để mở giao diện in báo cáo. Vui lòng chọn **Save as PDF (Lưu dưới dạng PDF)** trong cửa sổ hiện ra.")
+        
+        # Dùng JavaScript để kích hoạt lệnh in của trình duyệt
+        import streamlit.components.v1 as components
+        components.html(
+            """
+            <script>
+            function printPage() {
+                window.parent.print();
+            }
+            </script>
+            <button onclick="printPage()" style="
+                padding: 10px 20px; 
+                font-size: 16px; 
+                font-weight: bold; 
+                background-color: #ff4b4b; 
+                color: white; 
+                border: none; 
+                border-radius: 5px; 
+                cursor: pointer;
+                width: 100%;
+                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            ">
+                🖨️ XUẤT FILE PDF / IN BÁO CÁO
+            </button>
+            """,
+            height=60
+        )
