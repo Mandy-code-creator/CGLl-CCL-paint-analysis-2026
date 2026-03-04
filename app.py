@@ -121,52 +121,46 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
                 "Diff (m)": "{:.2f}", "Thick Var": "{:.3f}", "Diff Area (m²)": "{:.2f}"
             }))
 
-           # --- 2. BABY COIL DETAILS ---
+           # --- 2. PRODUCTION COIL DETAILS ---
             st.divider()
-            st.subheader("2. Baby Coil Details")
+            st.subheader("2. Production Coil Details") # Đổi tên subheader cho chuyên nghiệp
             
-            # Khởi tạo danh sách Order ID để người dùng chọn
             order_list = df[order_c].unique()
             sel_order = st.selectbox("Select Order ID to view details:", options=order_list)
             
             if sel_order:
-                # Lọc dữ liệu theo đơn hàng đã chọn
                 det = df[df[order_c] == sel_order].copy()
-                
-                # Tính toán sai lệch độ dày
                 det['Var'] = det[ccl_t] - det[cgl_t]
                 
-                # Chọn các cột cần hiển thị (bao gồm chiều rộng cuộn con ccl_w)
+                # Chọn các cột hiển thị
                 det_f = det[[
                     mother_c, baby_c, 
-                    cgl_t, cgl_w, cgl_l,  # Dữ liệu cuộn mẹ (CGL)
-                    ccl_t, ccl_w, 'Var', ccl_l   # Dữ liệu cuộn con (CCL)
+                    cgl_t, cgl_w, cgl_l, 
+                    ccl_t, ccl_w, 'Var', ccl_l 
                 ]].copy()
                 
-                # Đặt tên cột đầy đủ và rõ ràng
+                # Đổi tên cột: Bỏ "Mother/Baby", dùng "Input/Output" hoặc "CGL/CCL"
                 det_f.columns = [
-                    'Mother Coil ID', 
-                    'Baby Coil ID', 
-                    'Mother Actual Thick (mm)', 
-                    'Mother Actual Width (mm)', 
-                    'Mother Actual Length (m)', 
-                    'Baby Actual Thick (mm)', 
-                    'Baby Actual Width (mm)', 
-                    'Thickness Deviation (mm)', 
-                    'Baby Actual Length (m)'
+                    'Input Coil ID (CGL)', 
+                    'Output Coil ID (CCL)', 
+                    'Input Thick (mm)', 
+                    'Input Width (mm)', 
+                    'Input Length (m)', 
+                    'Output Thick (mm)', 
+                    'Output Width (mm)', 
+                    'Thick Deviation (mm)', 
+                    'Output Length (m)'
                 ]
                 
-                # Hiển thị bảng với định dạng số chuẩn
                 st.table(det_f.style.format({
-                    "Mother Actual Thick (mm)": "{:.3f}", 
-                    "Mother Actual Width (mm)": "{:,.0f}", 
-                    "Mother Actual Length (m)": "{:,.0f}",
-                    "Baby Actual Thick (mm)": "{:.3f}", 
-                    "Baby Actual Width (mm)": "{:,.0f}",
-                    "Thickness Deviation (mm)": "{:.3f}", 
-                    "Baby Actual Length (m)": "{:,.0f}"
+                    "Input Thick (mm)": "{:.3f}", 
+                    "Input Width (mm)": "{:,.0f}", 
+                    "Input Length (m)": "{:,.0f}",
+                    "Output Thick (mm)": "{:.3f}", 
+                    "Output Width (mm)": "{:,.0f}",
+                    "Thick Deviation (mm)": "{:.3f}", 
+                    "Output Length (m)": "{:,.0f}"
                 }))
-
             # --- 3. VISUAL INSIGHTS (CONCLUSIONS IN CHINESE) ---
             st.divider()
             st.subheader("3. Visual Insights & Analysis")
