@@ -5,13 +5,14 @@ import plotly.express as px
 # Set page configuration
 st.set_page_config(page_title="Paint Yield Analyzer", layout="wide")
 
-st.title("塗料耗損分析：鍍鋅(CGL)與彩塗(CCL)長度延伸差異")
+st.title("Paint Yield Analysis: CGL vs CCL Elongation")
 st.markdown("""
-本應用程式透過比對鍍鋅母捲與彩塗子捲的實際長度，來分析因鋼帶延伸造成的隱藏塗料耗損。
+This application analyzes the length variance between Galvanizing (CGL) mother coils 
+and Color Coating (CCL) baby coils to estimate hidden paint loss due to steel elongation.
 """)
 
 # Single file uploader for the master file
-uploaded_file = st.file_uploader("上傳資料總表 (.xlsx 或 .csv)", type=['xlsx', 'csv'])
+uploaded_file = st.file_uploader("Upload Master Data File (.xlsx or .csv)", type=['xlsx', 'csv'])
 
 if uploaded_file is not None:
     try:
@@ -19,6 +20,7 @@ if uploaded_file is not None:
         df = pd.read_excel(uploaded_file) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file)
         
         # --- Column mapping based on actual data ---
+        # Note: Keeping the Chinese headers to match the user's uploaded Excel file accurately.
         order_col = "訂單號碼"
         mother_coil_col = "投入鋼捲號碼"
         
@@ -32,7 +34,7 @@ if uploaded_file is not None:
         ccl_width = "實測寬度"
         ccl_len = "實測長度"
 
-        with st.spinner('正在處理與聚合資料...'):
+        with st.spinner('Processing and aggregating data...'):
             # Step 1: First groupby [Order Number, Mother Coil Number]
             # This extracts the true length of each mother coil without duplication, 
             # and sums up the baby coils' lengths for that specific mother coil.
@@ -50,10 +52,10 @@ if uploaded_file is not None:
             step2_agg = {
                 cgl_thick: 'mean',
                 cgl_width: 'mean',
-                cgl_len: 'sum',   # Sum of all unique mother coils' lengths in the order (SUM 镀锌測長度)
+                cgl_len: 'sum',   # Sum of all unique mother coils' lengths in the order
                 ccl_thick: 'mean',
                 ccl_width: 'mean',
-                ccl_len: 'sum'    # Sum of all baby coils' lengths in the order (SUM 子鋼捲)
+                ccl_len: 'sum'    # Sum of all baby coils' lengths in the order
             }
             df_summary = df_step1.groupby(order_col).agg(step2_agg).reset_index()
 
@@ -74,17 +76,17 @@ if uploaded_file is not None:
             # Extra Area = Average CCL Width (m) * Delta Length (m)
             df_summary['Extra_Area_m2'] = (df_summary[ccl_width] / 1000) * df_summary['Delta Length CGL-CCL']
 
-        st.success("資料處理成功！")
+        st.success("Data processed successfully!")
 
         # Display Summary Metrics
-        st.subheader("數據總覽")
+        st.subheader("Data Overview")
         m1, m2, m3 = st.columns(3)
-        m1.metric("分析訂單總數", len(df_summary))
-        m2.metric("總延伸長度 (m)", f"{df_summary['Delta Length CGL-CCL'].sum():,.2f}")
-        m3.metric("總額外塗層面積 (m²)", f"{df_summary['Extra_Area_m2'].sum():,.2f}")
+        m1.metric("Total Orders Analyzed", len(df_summary))
+        m2.metric("Total Elongation / Delta Length (m)", f"{df_summary['Delta Length CGL-CCL'].sum():,.2f}")
+        m3.metric("Total Extra Paint Area (m²)", f"{df_summary['Extra_Area_m2'].sum():,.2f}")
 
         # Visualization: Scatter plot (Thickness loss vs Length gain)
-        st.subheader("關聯分析：厚度減少與長度增加之關係")
+        st.subheader("Correlation Analysis: Thickness Reduction vs Length Elongation")
         fig = px.scatter(
             df_summary, 
             x='Thickness_Variance', 
@@ -92,11 +94,11 @@ if uploaded_file is not None:
             hover_data=[order_col, 'SUM 镀锌測長度', 'SUM 子鋼捲'],
             color='Extra_Area_m2',
             color_continuous_scale='Viridis',
-            title="彩塗製程中鋼帶延伸分析",
+            title="Coil Elongation Analysis in Color Coating Process",
             labels={
-                'Thickness_Variance': '厚度變化 (彩塗 - 鍍鋅)',
-                'Delta Length CGL-CCL': '延伸長度 (m)',
-                'Extra_Area_m2': '額外面積 (m²)'
+                'Thickness_Variance': 'Thickness Change (CCL - CGL)',
+                'Delta Length CGL-CCL': 'Elongation Length (m)',
+                'Extra_Area_m2': 'Extra Area (m²)'
             }
         )
         # Add reference lines
@@ -105,7 +107,7 @@ if uploaded_file is not None:
         st.plotly_chart(fig, use_container_width=True)
 
         # Display Detailed Table
-        st.subheader("訂單詳細資料 (依延伸長度排序)")
+        st.subheader("Detailed Order Data (Sorted by Elongation Length)")
         
         # Select columns to display in a clean order
         display_cols = [
@@ -120,7 +122,7 @@ if uploaded_file is not None:
         st.dataframe(df_summary[display_cols].sort_values(by='Delta Length CGL-CCL', ascending=False))
 
     except KeyError as e:
-        st.error(f"檔案中找不到欄位: {e}")
-        st.info("請確保上傳的 Excel 檔案包含正確的欄位名稱 (例如 '訂單號碼', '投入鋼捲號碼' 等)。")
+        st.error(f"Missing column in your file: {e}")
+        st.info("Please ensure your uploaded Excel file contains the exact column names (e.g., '訂單號碼', '投入鋼捲號碼', etc.).")
     except Exception as e:
-        st.error(f"發生未預期的錯誤: {e}")
+        st.error(f"An unexpected error occurred: {e}")
