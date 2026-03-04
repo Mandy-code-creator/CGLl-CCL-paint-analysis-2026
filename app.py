@@ -159,7 +159,7 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
             **生產產出綜合分析:**
             * **總投入 (Total Input):** {t_in:,.0f} m
             * **總產出 (Total Output):** {t_out:,.0f} m
-            * **不明面積差異 (Area Shortfall):** {area_s:,.2f} m² (此部分需進 một 步調查廢料記錄是否準確)
+            * **不明面積差異 (Area Shortfall):** {area_s:,.2f} m² (此部分需進一步調查廢料記錄是否準確)
             """)
 
             # --- 5. EXPORT ---
