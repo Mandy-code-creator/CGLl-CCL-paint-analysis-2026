@@ -122,18 +122,28 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
             }))
 
            # --- 2. BABY COIL DETAILS ---
+            st.divider()
+            st.subheader("2. Baby Coil Details")
+            
+            # Khởi tạo danh sách Order ID để người dùng chọn
+            order_list = df[order_c].unique()
+            sel_order = st.selectbox("Select Order ID to view details:", options=order_list)
+            
             if sel_order:
+                # Lọc dữ liệu theo đơn hàng đã chọn
                 det = df[df[order_c] == sel_order].copy()
+                
+                # Tính toán sai lệch độ dày
                 det['Var'] = det[ccl_t] - det[cgl_t]
                 
-                # Bổ sung thêm cột ccl_w (Chiều rộng cuộn con)
+                # Chọn các cột cần hiển thị (bao gồm chiều rộng cuộn con ccl_w)
                 det_f = det[[
                     mother_c, baby_c, 
                     cgl_t, cgl_w, cgl_l,  # Dữ liệu cuộn mẹ (CGL)
                     ccl_t, ccl_w, 'Var', ccl_l   # Dữ liệu cuộn con (CCL)
                 ]].copy()
                 
-                # Đặt tên cột chi tiết để sếp dễ theo dõi
+                # Đặt tên cột đầy đủ và rõ ràng
                 det_f.columns = [
                     'Mother Coil ID', 
                     'Baby Coil ID', 
@@ -141,7 +151,7 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
                     'Mother Actual Width (mm)', 
                     'Mother Actual Length (m)', 
                     'Baby Actual Thick (mm)', 
-                    'Baby Actual Width (mm)', # Cột mới thêm
+                    'Baby Actual Width (mm)', 
                     'Thickness Deviation (mm)', 
                     'Baby Actual Length (m)'
                 ]
