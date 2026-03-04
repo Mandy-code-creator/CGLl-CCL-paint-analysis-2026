@@ -1,71 +1,53 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
-import io
+import matplotlib.pyplot as plt
 
-st.set_page_config(page_title="Process Yield Dashboard", layout="wide")
-st.title("Process Yield & Paint Efficiency Dashboard")
+st.set_page_config(page_title="Length Variance Dashboard", layout="wide")
 
-uploaded_file = st.file_uploader("Upload Master Data File (.xlsx or .csv)", type=['xlsx','csv'])
+st.title("Length Input vs Output Analysis")
+
+uploaded_file = st.file_uploader("Upload Excel File", type=["xlsx", "xls"])
 
 if uploaded_file:
-    if uploaded_file.name.endswith('.xlsx'):
-        df = pd.read_excel(uploaded_file)
-    else:
-        df = pd.read_csv(uploaded_file)
+    df = pd.read_excel(uploaded_file)
 
-    df.columns = df.columns.str.replace(r'\s+','',regex=True)
+    st.subheader("Preview Data")
+    st.dataframe(df.head())
 
-    # Column mapping
-    order_col = "訂單號碼"
-    cgl_len_col = "镀锌測長度"
-    ccl_len_col = "實測長度"
-    width_col = "實測寬度"
-    coating_col = "塗層厚度_mm"
+    # ===== SELECT COLUMNS =====
+    cgl_col = st.selectbox("Select Input Length Column (CGL)", df.columns)
+    ccl_col = st.selectbox("Select Output Length Column (CCL)", df.columns)
 
-    # Convert mm → m
-    df[cgl_len_col] = df[cgl_len_col] / 1000
-    df[ccl_len_col] = df[ccl_len_col] / 1000
-    df[width_col] = df[width_col] / 1000
+    # ===== CLEAN DATA =====
+    df[cgl_col] = pd.to_numeric(df[cgl_col], errors='coerce')
+    df[ccl_col] = pd.to_numeric(df[ccl_col], errors='coerce')
 
-    # Aggregate per order
-    summary = df.groupby(order_col).agg(
-        CGL_Total = (cgl_len_col,'sum'),
-        CCL_Total = (ccl_len_col,'sum'),
-        Avg_Width = (width_col,'mean')
-    ).reset_index()
+    total_input = df[cgl_col].sum()
+    total_output = df[ccl_col].sum()
 
-    # 1️⃣ Length Yield
-    summary["Length_Yield_%"] = (summary["CCL_Total"] / summary["CGL_Total"]) * 100
+    variance = total_output - total_input
+    variance_percent = (variance / total_input * 100) if total_input != 0 else 0
+    yield_percent = (total_output / total_input * 100) if total_input != 0 else 0
 
-    # 2️⃣ Mechanical Loss
-    summary["Mechanical_Loss_m"] = summary["CGL_Total"] - summary["CCL_Total"]
+    st.divider()
 
-    # 3️⃣ Paint theoretical usage (based on OUTPUT area)
-    summary["CCL_Area_m2"] = summary["CCL_Total"] * summary["Avg_Width"]
+    col1, col2, col3 = st.columns(3)
 
-    rho_paint = 1200  # kg/m3
-    if coating_col in df.columns:
-        avg_coating_m = df[coating_col].mean() / 1000
-        summary["Paint_Theoretical_kg"] = summary["CCL_Area_m2"] * avg_coating_m * rho_paint
-    else:
-        summary["Paint_Theoretical_kg"] = None
+    col1.metric("Total Input Length (m)", f"{total_input:,.2f}")
+    col2.metric("Total Output Length (m)", f"{total_output:,.2f}")
+    col3.metric("Length Variance (m)", f"{variance:,.2f}")
 
-    st.subheader("Order Summary")
-    st.dataframe(summary, use_container_width=True)
+    st.metric("Variance (%)", f"{variance_percent:.2f}%")
+    st.metric("Length Yield (%)", f"{yield_percent:.2f}%")
 
-    # Visualization
-    fig = px.bar(summary, x=order_col, y="Length_Yield_%",
-                 title="Length Yield per Order (%)")
-    st.plotly_chart(fig, use_container_width=True)
+    st.divider()
 
-    # Export
-    buffer = io.BytesIO()
-    with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-        summary.to_excel(writer, index=False)
+    # ===== BAR CHART =====
+    st.subheader("Total Length Comparison")
 
-    st.download_button(
-        "Download Excel Report",
-        buffer.getvalue(),
-        "Process_Yield_Report.xlsx"
-    )
+    fig, ax = plt.subplots()
+    ax.bar(["Total Input", "Total Output"], [total_input, total_output])
+    ax.set_ylabel("Length (m)")
+    ax.set_title("Input vs Output Length")
+
+    st.pyplot(fig)
