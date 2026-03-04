@@ -45,11 +45,12 @@ def load_auto_data(url):
                 gid = url.split("gid=")[1].split("&")[0]
             csv_url = f"{base_url}/export?format=csv&gid={gid}"
             df = pd.read_csv(csv_url)
+            # Làm sạch tên cột tự động
             df.columns = df.columns.astype(str).str.strip().str.replace(r'\s+', '', regex=True)
             return df
         return None
     except Exception as e:
-        st.error(f"⚠️ Lỗi kết nối dữ liệu: {e}")
+        st.error(f"⚠️ Lỗi kết nối dữ liệu: Hãy đảm bảo Link ở chế độ Public. Lỗi: {e}")
         return None
 
 # =============================
@@ -76,7 +77,7 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
                 cgl_width: 'mean', cgl_thick: 'mean', ccl_thick: 'mean'
             }).reset_index()
 
-            # Rename an toàn (không dùng ghi đè list để tránh lỗi mismatch)
+            # Rename an toàn (không bao giờ lỗi Length Mismatch)
             df_summary = df_summary.rename(columns={
                 mother_col: 'Qty', 
                 cgl_len: 'Input_m', 
@@ -93,12 +94,12 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
             sum_disp = df_summary[[order_col, 'Qty', 'Input_m', 'Output_m', 'Delta', 'Thick_Var', 'Area_m2']].copy()
             
             # Đổi tên hiển thị cho người dùng
-            display_names = {
+            disp_names = {
                 order_col: 'Order ID', 'Qty': 'Mothers', 'Input_m': 'Input (m)', 
                 'Output_m': 'Output (m)', 'Delta': 'Diff (m)', 
                 'Thick_Var': 'Thick Var', 'Area_m2': 'Diff Area (m²)'
             }
-            sum_disp = sum_disp.rename(columns=display_names)
+            sum_disp = sum_disp.rename(columns=disp_names)
             
             sum_disp.insert(0, 'No.', range(1, len(sum_disp) + 1))
             st.table(sum_disp.set_index('No.').style.format({
@@ -122,10 +123,11 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
             # --- 📈 3. VISUAL INSIGHTS ---
             st.divider()
             st.subheader("📈 3. 數據可視化與分析 (Visual Insights)")
-            fig1 = px.bar(sum_disp, x='Order ID', y='Diff Area (m²)', color='Diff (m)', color_continuous_scale='RdBu', title="Extra Area per Order")
-            fig1.update_layout(plot_bgcolor='white')
+            fig1 = px.bar(sum_disp, x='Order ID', y='Diff Area (m²)', color='Diff (m)', 
+                          color_continuous_scale='RdBu', title="Extra Area per Order")
+            fig1.update_layout(plot_bgcolor='white', margin=dict(l=10,r=10,t=40,b=10))
             st.plotly_chart(fig1, use_container_width=True)
-            st.info("**💡 結論:** 深色柱體代表長度差異較大，建議優先核對。")
+            st.info("**💡 結論:** 深色柱體代表長 độ dài chênh lệch lớn, cần kiểm tra lại quy trình.")
 
             fig2 = px.histogram(sum_disp, x='Diff (m)', nbins=15, title="Variance Distribution")
             fig2.update_layout(plot_bgcolor='white')
@@ -141,7 +143,7 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
             short_area = abs(sum_disp[sum_disp['Diff (m)'] < 0]['Diff Area (m²)'].sum())
             st.markdown(f"""
             * **投入與產出:** 投入 **{total_in:,.0f} m**，產出 **{total_out:,.0f} m**。
-            * 📉 **長度短缺:** 相當於 **{short_area:,.2f} m²** 的不明面積差異。
+            * 📉 **長度短缺:** Tương đương **{short_area:,.2f} m²** diện tích thiếu hụt không rõ nguyên nhân.
             """)
 
             # --- 💾 5. DATA EXPORT ---
@@ -155,7 +157,8 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
             with c2:
                 components.html("""
                     <script>function printPage() { window.parent.print(); }</script>
-                    <button onclick="printPage()" style="background-color: white; color: #1e3a8a; border: 2px solid #1e3a8a; border-radius: 8px; padding: 10px; font-size: 15px; cursor: pointer; width: 100%; font-weight: bold;"> 🖨️ SAVE AS PDF REPORT </button>
+                    <button onclick="printPage()" style="background-color: white; color: #1e3a8a; border: 2px solid #1e3a8a; 
+                    border-radius: 8px; padding: 10px; font-size: 15px; cursor: pointer; width: 100%; font-weight: bold; width: 100%;"> 🖨️ SAVE AS PDF REPORT </button>
                 """, height=70)
 
         except Exception as e:
