@@ -114,25 +114,29 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
             disp['Mothers'] = disp['Mothers'].astype(int)
             disp.insert(0, 'No.', range(1, len(disp) + 1))
             
-            # CSS để khống chế chiều cao tương đương khoảng 20 dòng và tạo thanh cuộn
+            # CSS ÉP BUỘC KHUNG CUỘN
             st.markdown("""
                 <style>
-                .scrollable-table {
-                    max-height: 650px; /* Chiều cao này xấp xỉ hiển thị 20 dòng */
-                    overflow-y: auto;
+                .scroll-container {
+                    height: 500px; /* Chiều cao cố định cho khoảng 20 dòng */
+                    overflow-y: scroll !important;
+                    display: block;
                     border: 1px solid #e2e8f0;
                 }
-                thead tr th {
+                .scroll-container table {
+                    display: table;
+                }
+                .scroll-container thead tr th {
                     position: sticky;
                     top: 0;
-                    z-index: 10;
+                    z-index: 100;
                     background-color: #f8fafc !important;
                 }
                 </style>
                 """, unsafe_allow_html=True)
 
-            # Bao bọc bảng trong thẻ div có class scrollable-table
-            st.markdown('<div class="scrollable-table">', unsafe_allow_html=True)
+            # Bao bọc bảng trong div với class scroll-container
+            st.markdown('<div class="scroll-container">', unsafe_allow_html=True)
             st.table(disp.set_index('No.').style.format({
                 "Input (m)": "{:,.0f}", "Output (m)": "{:,.0f}",
                 "Diff (m)": "{:.2f}", "Thick Var": "{:.3f}", "Diff Area (m²)": "{:.2f}"
