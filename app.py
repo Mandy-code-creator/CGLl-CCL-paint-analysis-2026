@@ -48,14 +48,12 @@ if 'saved_data' in st.session_state:
 
     try:
         with st.spinner('Calculating yields...'):
-            # STEP 1: Aggregate by Mother Coil to avoid duplicating CGL length
             step1_agg = {
                 cgl_thick: 'mean', cgl_width: 'mean', cgl_len: 'first',
                 ccl_thick: 'mean', ccl_width: 'mean', ccl_len: 'sum'
             }
             df_step1 = df.groupby([order_col, mother_col]).agg(step1_agg).reset_index()
 
-            # STEP 2: Aggregate by Order
             step2_agg = {
                 mother_col: 'count', 
                 cgl_thick: 'mean', cgl_width: 'mean', cgl_len: 'sum',
@@ -63,7 +61,6 @@ if 'saved_data' in st.session_state:
             }
             df_summary = df_step1.groupby(order_col).agg(step2_agg).reset_index()
 
-            # Final Calculations
             df_summary.rename(columns={
                 mother_col: 'Mother_Count',
                 cgl_len: 'CGL_Total', 
@@ -74,14 +71,13 @@ if 'saved_data' in st.session_state:
             df_summary['Extra_Area_m2'] = (df_summary[ccl_width] / 1000) * df_summary['Delta_m']
 
         # =============================
-        # 3. TABLES (Print-friendly & Full Data)
+        # 3. TABLES
         # =============================
         st.subheader("1. Order Summary")
         disp_cols = [order_col, 'Mother_Count', 'CGL_Total', 'CCL_Total', 'Delta_m', 'Thick_Var_mm', 'Extra_Area_m2']
         df_summary_disp = df_summary[disp_cols].sort_values(by='Extra_Area_m2', ascending=False).copy()
         df_summary_disp.columns = ['Order', 'Mothers', 'CGL (m)', 'CCL (m)', 'Delta (m)', 'Thick Var (mm)', 'Extra Area (m2)']
         
-        # Hiển thị toàn bộ bảng tóm tắt
         st.table(df_summary_disp) 
 
         st.divider()
@@ -103,11 +99,10 @@ if 'saved_data' in st.session_state:
             df_detail_final = df_detail[d_cols].sort_values(by=mother_col).copy()
             df_detail_final.columns = ['Mother Coil', 'Baby Coil', 'CGL Thick', 'CCL Thick', 'Var (mm)', 'CCL Len (m)']
             
-            # Hiển thị toàn bộ bảng chi tiết
             st.table(df_detail_final)
 
         # =============================
-        # 4. VISUAL ANALYSIS (Original Designs)
+        # 4. VISUAL ANALYSIS
         # =============================
         st.divider()
         st.subheader("3. Visual Analysis")
@@ -118,12 +113,38 @@ if 'saved_data' in st.session_state:
         fig2 = px.histogram(df_summary_disp, x='Delta (m)', nbins=20, title="Distribution of Elongation")
         st.plotly_chart(fig2, use_container_width=True)
 
-        # Đã sửa 'Order' thành order_col ở dòng dưới đây
         fig3 = px.scatter(df_summary, x='Thick_Var_mm', y='Delta_m', color='Extra_Area_m2', hover_data=[order_col], title="Thickness vs Length Delta")
         st.plotly_chart(fig3, use_container_width=True)
 
         # =============================
-        # 5. EXCEL EXPORT
+        # 5. CONCLUSION (PHẦN MỚI THÊM VÀO)
+        # =============================
+        st.divider()
+        st.subheader("💡 4. Executive Summary & Conclusion")
+        
+        # Calculate totals for the conclusion
+        total_input = df_summary_disp['CGL (m)'].sum()
+        total_output = df_summary_disp['CCL (m)'].sum()
+        total_elongation = df_summary_disp['Delta (m)'].sum()
+        total_paint_loss_area = df_summary_disp['Extra Area (m2)'].sum()
+        
+        if not df_summary_disp.empty:
+            worst_order = df_summary_disp.iloc[0]['Order']
+            worst_area = df_summary_disp.iloc[0]['Extra Area (m2)']
+            
+            st.markdown(f"""
+            **Overall Production Performance:**
+            * **Total Processed:** The plant processed **{total_input:,.0f} m** of input steel (CGL), resulting in **{total_output:,.0f} m** of output steel (CCL).
+            * **Net Elongation:** Across all analyzed orders, there is a total net elongation of **{total_elongation:,.0f} m**.
+            * **Estimated Paint Waste:** This elongation equates to **{total_paint_loss_area:,.2f} m²** of extra surface area that consumed paint without adding value.
+
+            **Actionable Insight:**
+            * ⚠️ **Order `{worst_order}`** is the primary contributor to paint loss, generating **{worst_area:,.2f} m²** of extra area. 
+            * **Recommendation:** Quality Control and Production teams should review the tension settings and process parameters on the CCL line specifically for this order type.
+            """)
+
+        # =============================
+        # 6. EXCEL EXPORT
         # =============================
         excel_data = io.BytesIO()
         with pd.ExcelWriter(excel_data, engine='xlsxwriter') as writer:
