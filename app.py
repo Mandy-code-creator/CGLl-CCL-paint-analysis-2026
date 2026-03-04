@@ -4,39 +4,43 @@ import plotly.express as px
 import io
 import streamlit.components.v1 as components
 
-
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="Steel Yield Insight", layout="wide")
 
 # ==========================================================
-# 1. AUTO-SYNC CONFIGURATION (INSERT YOUR LINK HERE)
+# 1. AUTO-SYNC CONFIGURATION
 # ==========================================================
 GSHEET_URL = "https://docs.google.com/spreadsheets/d/1-kayrLVYwOO66Xxc7Vk7dbTNZ5Aph4MVd9DMTz6RJS0/edit?gid=0#gid=0"
 
-# --- MINIMALIST DESIGN: UNIFORM GRID LINES ---
+# --- MINIMALIST DESIGN & SCROLLABLE TABLE ---
 st.markdown("""
     <style>
     .stApp { background-color: #ffffff; }
-    div[data-testid="stVerticalBlock"] > div:has(div.stPlotlyChart), 
-    div[data-testid="stVerticalBlock"] > div:has(div.stTable) {
-        background-color: #ffffff; padding: 20px; border-radius: 0px;
-        margin-bottom: 20px; border: none;
-    }
     h1, h2, h3 { color: #1e3a8a; font-family: 'Segoe UI', sans-serif; font-weight: 700 !important; }
+    
+    /* KHUNG CUỘN CHO BẢNG SUMMARY */
+    .scrollable-table {
+        max-height: 400px;
+        overflow-y: auto;
+        border: 1px solid #e2e8f0;
+        margin-bottom: 25px;
+    }
+
     table { 
         width: 100% !important; 
         border-collapse: collapse !important; 
         font-family: 'Segoe UI', sans-serif;
         color: #334155;
-        border: 1px solid #e2e8f0 !important;
     }
     th { 
+        position: sticky; top: 0; 
         border: 1px solid #e2e8f0 !important; 
         color: #1e3a8a !important; 
         text-align: center !important; 
         padding: 12px 8px !important;
         font-size: 13px !important;
         background-color: #f8fafc !important;
+        z-index: 1;
     }
     td { 
         text-align: center !important; 
@@ -45,20 +49,11 @@ st.markdown("""
         font-size: 13px !important;
     }
     tr:hover { background-color: #f1f5f9; }
-    
-    /* Tinh chỉnh giao diện Expander để đồng bộ với thiết kế */
-    .streamlit-expanderHeader {
-        background-color: #f8fafc !important;
-        color: #1e3a8a !important;
-        font-weight: 600 !important;
-        border: 1px solid #e2e8f0 !important;
-    }
 
     @media print {
         header, .stSidebar, .stButton, [data-testid="stHeader"], .stDivider, .stTextInput { display: none !important; }
         .main .block-container { max-width: 100% !important; padding: 0.5cm !important; }
-        table { border: 1px solid #000 !important; }
-        th, td { border: 0.5pt solid #ccc !important; }
+        .scrollable-table { max-height: none !important; overflow: visible !important; }
     }
     </style>
     """, unsafe_allow_html=True)
@@ -84,7 +79,7 @@ def load_auto_data(url):
         return None
 
 # =============================
-# 2. CORE LOGIC
+# 2. CORE LOGIC & FULL DISPLAY
 # =============================
 if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY":
     df = load_auto_data(GSHEET_URL)
@@ -106,35 +101,31 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
                 ccl_t: 'mean', cgl_t: 'mean', cgl_w: 'mean'
             }).reset_index()
 
-            summary = summary.rename(columns={mother_c: 'Qty', cgl_l: 'In_m', ccl_l: 'Output_m'})
-            summary['Diff'] = summary['Output_m'] - summary['In_m']
+            summary = summary.rename(columns={mother_c: 'Qty', cgl_l: 'In_m', ccl_l: 'Out_m'})
+            summary['Diff'] = summary['Out_m'] - summary['In_m']
             summary['Thick_Var'] = summary[ccl_t] - summary[cgl_t]
             summary['Area_m2'] = (summary[cgl_w] / 1000) * summary['Diff']
 
-            # --- 1. ORDER SUMMARY (CHỨC NĂNG THU GIÃN TẠI ĐÂY) ---
-            # 'expanded=True' giúp bảng mở sẵn khi load app, có thể click để thu lại
-            with st.expander("📋 1. Click to Expand/Collapse Order Summary Table", expanded=True):
-                # Ghi chú thuật ngữ (Technical Term Note) bên trong expander
-                st.markdown("""
-                > **💡 術語說明 (Technical Note):** > **Diff Area (m²)** = **塗層面積差異** (Coating Area Variance)  
-                > * **正值 (+):** 鋼帶延展 (Elongation)，導致塗漆消耗量增加。  
-                > * **負值 (-):** 長度短缺 (Shortage)，可能源於剪切廢料 (Scrap) 或感測器誤差。
-                """)
+            # --- PHẦN 1: ORDER SUMMARY (CÓ KHUNG CUỘN) ---
+            st.subheader("1. Order Summary")
+            st.markdown("> **Technical Note:** Diff Area (m²) = Coating Area Variance (+ Elongation / - Shortage)")
+            
+            disp = summary[[order_c, 'Qty', 'In_m', 'Out_m', 'Diff', 'Thick_Var', 'Area_m2']].copy()
+            disp.columns = ['Order ID', 'Qty', 'Input (m)', 'Output (m)', 'Diff (m)', 'Thick Var', 'Diff Area (m²)']
+            disp['Qty'] = disp['Qty'].astype(int)
+            disp.insert(0, 'No.', range(1, len(disp) + 1))
+            
+            st.markdown('<div class="scrollable-table">', unsafe_allow_html=True)
+            st.table(disp.set_index('No.').style.format({
+                "Input (m)": "{:,.0f}", "Output (m)": "{:,.0f}",
+                "Diff (m)": "{:.2f}", "Thick Var": "{:.3f}", "Diff Area (m²)": "{:.2f}"
+            }))
+            st.markdown('</div>', unsafe_allow_html=True)
 
-                disp = summary[[order_c, 'Qty', 'In_m', 'Output_m', 'Diff', 'Thick_Var', 'Area_m2']].copy()
-                disp.columns = ['Order ID', 'Mothers', 'Input (m)', 'Output (m)', 'Diff (m)', 'Thick Var', 'Diff Area (m²)']
-                disp['Mothers'] = disp['Mothers'].astype(int)
-                disp.insert(0, 'No.', range(1, len(disp) + 1))
-                
-                st.table(disp.set_index('No.').style.format({
-                    "Input (m)": "{:,.0f}", "Output (m)": "{:,.0f}",
-                    "Diff (m)": "{:.2f}", "Thick Var": "{:.3f}", "Diff Area (m²)": "{:.2f}"
-                }))
-
-            # --- 2. BABY COIL DETAILS ---
+            # --- PHẦN 2: BABY COIL DETAILS ---
             st.divider()
             st.subheader("2. Baby Coil Details")
-            sel_order = st.selectbox("Select Order ID:", options=df[order_c].unique())
+            sel_order = st.selectbox("Select Order ID to view details:", options=df[order_c].unique())
             if sel_order:
                 det = df[df[order_c] == sel_order].copy()
                 det['Var'] = det[ccl_t] - det[cgl_t]
@@ -144,32 +135,36 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
                     "CGL Thick": "{:.3f}", "CCL Thick": "{:.3f}", "Var (mm)": "{:.3f}", "CCL Len (m)": "{:.0f}"
                 }))
 
-            # --- 3. VISUAL INSIGHTS (CONCLUSIONS IN CHINESE) ---
+            # --- PHẦN 3: VISUAL INSIGHTS (3 BIỂU ĐỒ) ---
             st.divider()
             st.subheader("3. Visual Insights & Analysis")
             
+            # Biểu đồ 1: Bar Chart
             f1 = px.bar(disp, x='Order ID', y='Diff Area (m²)', color='Diff (m)', 
                         color_continuous_scale='RdBu', title="Extra Area per Order")
             st.plotly_chart(f1, use_container_width=True)
-            st.info("**分析結論**: 監控各訂單的塗層面積偏差。偏離中心值的數據代表生產投入與產出不一致，建議優先核對該批次的生產日誌。")
 
+            # Biểu đồ 2: Histogram
             f2 = px.histogram(disp, x='Diff (m)', nbins=15, title="Production Variance Distribution")
             st.plotly_chart(f2, use_container_width=True)
-            st.warning("**分析結論**: 數據分布反映生產穩定性。離群值標示該訂單存在異常長度變化，需確認是物理延展、裁切損耗或是計量誤差。")
 
-            # --- 4. EXECUTIVE SUMMARY ---
+            # Biểu đồ 3: Scatter Plot
+            f3 = px.scatter(summary, x='Thick_Var', y='Diff', color='Area_m2', hover_data=[order_c], title="Thickness vs Length Variance")
+            st.plotly_chart(f3, use_container_width=True)
+
+            # --- PHẦN 4: EXECUTIVE SUMMARY ---
             st.divider()
             st.subheader("4. Executive Summary")
             t_in, t_out = disp['Input (m)'].sum(), disp['Output (m)'].sum()
             area_s = abs(disp[disp['Diff (m)'] < 0]['Diff Area (m²)'].sum())
             st.markdown(f"""
-            **生產產出綜合分析:**
-            * **總投入 (Total Input):** {t_in:,.0f} m
-            * **總產出 (Total Output):** {t_out:,.0f} m
-            * **不明面積差異 (Area Shortfall):** {area_s:,.2f} m² (需進一步核實廢料申報準確性)
+            **整體生產指標 (Overall Production Metrics):**
+            * **Total Input:** {t_in:,.0f} m
+            * **Total Output:** {t_out:,.0f} m
+            * **Area Shortfall:** {area_s:,.2f} m² (需進一步核實廢料申報準確性)
             """)
 
-            # --- 5. EXPORT ---
+            # --- PHẦN 5: EXPORT ---
             st.subheader("5. Export Data")
             c1, c2 = st.columns(2)
             with c1:
@@ -188,4 +183,4 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
         except Exception as e:
             st.error(f"Logic Error: {e}")
 else:
-    st.info("Please insert the Google Sheet Link in the source code (GSHEET_URL).")
+    st.info("Please insert the Google Sheet Link in the source code.")
