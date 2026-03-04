@@ -3,7 +3,7 @@ import pandas as pd
 import plotly.express as px
 import io
 
-# --- PAGE CONFIGURATION ---
+# --- PAGE CONFIGURATION (Your Design) ---
 st.set_page_config(page_title="Paint Yield Analyzer", layout="wide")
 st.title("Paint Yield Analysis: CGL vs CCL Elongation")
 st.markdown("""
@@ -12,7 +12,7 @@ and **Color Coating (CCL)** baby coils to estimate hidden paint loss.
 """)
 
 # =============================
-# 1. FILE UPLOAD & PRE-PROCESSING
+# 1. FILE UPLOAD (Your Logic)
 # =============================
 uploaded_file = st.file_uploader("Upload Master Data File (.xlsx or .csv)", type=['xlsx', 'csv'])
 
@@ -23,22 +23,22 @@ if uploaded_file is not None:
         else:
             df_temp = pd.read_excel(uploaded_file) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file)
 
-        # CLEANING: Remove whitespaces and handle duplicates in column names
+        # Cleaning logic to prevent "Column Not Found" errors
         df_temp.columns = df_temp.columns.str.replace(r'\s+', '', regex=True)
         df_temp = df_temp.loc[:, ~df_temp.columns.duplicated()]
 
         st.session_state['saved_data'] = df_temp
-        st.success("Data loaded and cleaned successfully!")
+        st.success("Data loaded successfully!")
     except Exception as e:
         st.error(f"Error reading file: {e}")
 
 # =============================
-# 2. DATA ANALYSIS ENGINE
+# 2. DATA PROCESSING (Strictly Your Logic)
 # =============================
 if 'saved_data' in st.session_state:
     df = st.session_state['saved_data'].copy()
 
-    # Column Mapping
+    # Your ERP Column Mapping
     order_col = "訂單號碼"
     mother_coil_col = "投入鋼捲號碼"
     baby_coil_col = "產出鋼捲號碼"
@@ -50,84 +50,96 @@ if 'saved_data' in st.session_state:
     ccl_len = "實測長度"
 
     try:
-        with st.spinner('Calculating yields...'):
-            # Step 1: Aggregate by Mother Coil
+        with st.spinner('Processing and aggregating data...'):
+            # Two-step aggregation to handle multiple mother coils
             step1_agg = {
                 cgl_thick: 'first', cgl_width: 'first', cgl_len: 'first',
                 ccl_thick: 'mean', ccl_width: 'mean', ccl_len: 'sum'
             }
             df_step1 = df.groupby([order_col, mother_coil_col]).agg(step1_agg).reset_index()
 
-            # Step 2: Aggregate by Order Number
             step2_agg = {
                 cgl_thick: 'mean', cgl_width: 'mean', cgl_len: 'sum',
                 ccl_thick: 'mean', ccl_width: 'mean', ccl_len: 'sum'
             }
             df_summary = df_step1.groupby(order_col).agg(step2_agg).reset_index()
 
+            # Variance Calculations
             df_summary.rename(columns={cgl_len: 'CGL_Total_Length', ccl_len: 'CCL_Total_Length'}, inplace=True)
             df_summary['Delta_Length'] = df_summary['CCL_Total_Length'] - df_summary['CGL_Total_Length']
             df_summary['Thickness_Variance'] = df_summary[ccl_thick] - df_summary[cgl_thick]
             df_summary['Extra_Area_m2'] = (df_summary[ccl_width] / 1000) * df_summary['Delta_Length']
 
-        # --- SECTION 1: ORDER SUMMARY ---
+        # =============================
+        # 3. ORDER SUMMARY (Your Design)
+        # =============================
         st.subheader("1. Order Summary")
         summary_display_cols = [order_col, 'CGL_Total_Length', 'CCL_Total_Length', 'Delta_Length', 'Thickness_Variance', 'Extra_Area_m2']
         df_summary_display = df_summary[summary_display_cols].sort_values(by='Extra_Area_m2', ascending=False).copy()
-        df_summary_display.columns = ['Order Number', 'CGL Length (m)', 'CCL Length (m)', 'Delta Length (m)', 'Thickness Var (mm)', 'Extra Area (m2)']
+        df_summary_display.columns = ['Order Number', 'CGL Total Length (m)', 'CCL Total Length (m)', 'Delta Length (m)', 'Thickness Variance (mm)', 'Extra Area (m2)']
         st.dataframe(df_summary_display, use_container_width=True)
-
-        # --- SECTION 2: DETAILS ---
         st.divider()
-        st.subheader("2. Detailed Analysis per Order")
-        order_list = df[order_col].dropna().unique().tolist()
-        selected_order = st.selectbox("Search for an Order:", options=order_list)
 
-        df_detail_final = None
+        # =============================
+        # 4. BABY COIL DETAILS (Your Design)
+        # =============================
+        st.subheader("2. Baby Coil Details")
+        st.markdown("Select an order to view its specific breakdown and length totals.")
+        order_list = df[order_col].dropna().unique().tolist()
+        selected_order = st.selectbox("Select Order Number:", options=order_list)
+
+        df_detail_display = None
         if selected_order:
             order_totals = df_summary[df_summary[order_col] == selected_order].iloc[0]
-            m1, m2, m3 = st.columns(3)
-            m1.metric("CGL Total", f"{order_totals['CGL_Total_Length']:,.0f} m")
-            m2.metric("CCL Total", f"{order_totals['CCL_Total_Length']:,.0f} m")
-            m3.metric("Elongation", f"{order_totals['Delta_Length']:,.0f} m", delta=f"{order_totals['Delta_Length']:,.0f} m", delta_color="inverse")
+            st.markdown(f"**Length Summary for Order: {selected_order}**")
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Total Mother Coils Length (CGL)", f"{order_totals['CGL_Total_Length']:,.0f} m")
+            col2.metric("Total Baby Coils Length (CCL)", f"{order_totals['CCL_Total_Length']:,.0f} m")
+            col3.metric("Length Variance (Delta)", f"{order_totals['Delta_Length']:,.0f} m", 
+                        delta=f"{order_totals['Delta_Length']:,.0f} m", delta_color="inverse")
             
             df_detail = df[df[order_col] == selected_order].copy()
             df_detail['Thickness_Variance'] = df_detail[ccl_thick] - df_detail[cgl_thick]
-            detail_cols = [mother_coil_col, baby_coil_col, cgl_thick, ccl_thick, 'Thickness_Variance', ccl_len]
-            df_detail_final = df_detail[detail_cols].copy()
-            df_detail_final.columns = ['Mother Coil ID', 'Baby Coil ID', 'CGL Thick', 'CCL Thick', 'Diff (mm)', 'Length (m)']
-            st.dataframe(df_detail_final, use_container_width=True)
-
-        # --- SECTION 3: CHARTS ---
-        st.divider()
-        st.subheader("3. Executive Dashboard")
-        c1, c2 = st.columns(2)
-        with c1:
-            st.plotly_chart(px.bar(df_summary_display.head(10), x='Order Number', y='Extra Area (m2)', title="Top 10 High Waste Orders"), use_container_width=True)
-        with c2:
-            st.plotly_chart(px.scatter(df_summary, x='Thickness_Variance', y='Delta_Length', color='Extra_Area_m2', title="Thickness vs Elongation Correlation"), use_container_width=True)
+            detail_display_cols = [mother_coil_col, baby_coil_col, cgl_thick, ccl_thick, 'Thickness_Variance', ccl_len]
+            df_detail_display = df_detail[detail_display_cols].sort_values(by=mother_coil_col).copy()
+            df_detail_display.columns = ['Mother Coil', 'Baby Coil', 'CGL Thickness', 'CCL Thickness', 'Thickness Variance (mm)', 'CCL Length (m)']
+            st.dataframe(df_detail_display, use_container_width=True)
 
         # =============================
-        # 4. EXPORT (SỬA LỖI TẠI ĐÂY)
+        # 5. VISUAL ANALYSIS (Strictly Your Visuals)
         # =============================
-        st.sidebar.header("Export Report")
+        st.subheader("3. Visual Analysis: Length & Extra Area")
+        fig1 = px.bar(df_summary_display, x='Order Number', y='Extra Area (m2)', color='Delta Length (m)', text='Extra Area (m2)', title="Extra Painted Area per Order")
+        st.plotly_chart(fig1, use_container_width=True)
+
+        st.subheader("4. Distribution of Length Variance")
+        fig2 = px.histogram(df_summary_display, x='Delta Length (m)', nbins=20, title="Distribution of Delta Length (CCL - CGL)")
+        st.plotly_chart(fig2, use_container_width=True)
+
+        st.subheader("5. Thickness vs Length Variance")
+        fig3 = px.scatter(df_summary, x='Thickness_Variance', y='Delta_Length', color='Extra_Area_m2', hover_data=[order_col], title="Thickness Variance vs Length Delta")
+        st.plotly_chart(fig3, use_container_width=True)
+
+        # =============================
+        # 6. EXPORT REPORTS (Fixed for Cloud)
+        # =============================
+        st.subheader("6. Export Reports")
+        excel_buffer = io.BytesIO()
+        with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
+            df_summary_display.to_excel(writer, sheet_name='Order Summary', index=False)
+            if df_detail_display is not None:
+                df_detail_display.to_excel(writer, sheet_name='Details', index=False)
         
-        # EXCEL EXPORT (Cách an toàn nhất)
-        buffer = io.BytesIO()
-        with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-            df_summary_display.to_excel(writer, sheet_name='Summary', index=False)
-            if df_detail_final is not None:
-                df_detail_final.to_excel(writer, sheet_name='Order_Details', index=False)
-        
-        st.sidebar.download_button(
+        st.download_button(
             label="📥 Download Excel Report",
-            data=buffer.getvalue(),
-            file_name=f"Paint_Yield_{selected_order}.xlsx",
+            data=excel_buffer.getvalue(),
+            file_name=f"Paint_Yield_Report_{selected_order if selected_order else 'All'}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
-        st.sidebar.info("To save as PDF: Use your browser's Print (Ctrl+P) and select 'Save as PDF'.")
+        st.info("💡 To save the dashboard as PDF, press Ctrl+P (or Cmd+P) and select 'Save as PDF'.")
 
     except Exception as e:
-        st.error(f"Error: {e}")
+        st.error(f"An unexpected error occurred: {e}")
+
 else:
-    st.info("👆 Please upload your data file.")
+    st.info("👆 Please upload your master data file (.xlsx or .csv) to begin.")
