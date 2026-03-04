@@ -124,14 +124,38 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
             # --- 2. BABY COIL DETAILS ---
             st.divider()
             st.subheader("2. Baby Coil Details")
-            sel_order = st.selectbox("Select Order ID:", options=df[order_c].unique())
+            sel_order = st.selectbox("Select Order ID to view details:", options=df[order_c].unique())
+            
             if sel_order:
+                # Lấy dữ liệu chi tiết của đơn hàng đã chọn
                 det = df[df[order_c] == sel_order].copy()
+                
+                # Tính toán sai lệch độ dày (CCL - CGL)
                 det['Var'] = det[ccl_t] - det[cgl_t]
-                det_f = det[[mother_c, baby_c, cgl_t, ccl_t, 'Var', ccl_l]].copy()
-                det_f.columns = ['Mother Coil', 'Baby Coil', 'CGL Thick', 'CCL Thick', 'Var (mm)', 'CCL Len (m)']
+                
+                # Chọn và sắp xếp các cột bao gồm kích thước cuộn mẹ (CGL) và cuộn con (CCL)
+                # Cột cuộn mẹ: CGL Thick, CGL Width, CGL Length
+                det_f = det[[
+                    mother_c, baby_c, 
+                    cgl_t, cgl_w, cgl_l,  # Kích thước cuộn mẹ
+                    ccl_t, 'Var', ccl_l   # Kích thước cuộn con
+                ]].copy()
+                
+                # Đặt lại tên cột cho chuyên nghiệp (Tiếng Anh theo yêu cầu của bạn)
+                det_f.columns = [
+                    'Mother Coil', 'Baby Coil', 
+                    'Mother Thick', 'Mother Width', 'Mother Length', 
+                    'Baby Thick', 'Thick Var', 'Baby Length'
+                ]
+                
+                # Hiển thị bảng với định dạng số phù hợp
                 st.table(det_f.style.format({
-                    "CGL Thick": "{:.3f}", "CCL Thick": "{:.3f}", "Var (mm)": "{:.3f}", "CCL Len (m)": "{:.0f}"
+                    "Mother Thick": "{:.3f}", 
+                    "Mother Width": "{:,.0f}", 
+                    "Mother Length": "{:,.0f}",
+                    "Baby Thick": "{:.3f}", 
+                    "Thick Var": "{:.3f}", 
+                    "Baby Length": "{:,.0f}"
                 }))
 
             # --- 3. VISUAL INSIGHTS (CONCLUSIONS IN CHINESE) ---
