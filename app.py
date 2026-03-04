@@ -72,23 +72,20 @@ if 'saved_data' in st.session_state:
             df_summary['Extra_Area_m2'] = (df_summary[ccl_width] / 1000) * df_summary['Delta_m']
 
         # =============================
-        # 3. TABLES (ĐÃ SỬA FORMAT SỐ THẬP PHÂN)
+        # 3. TABLES 
         # =============================
         st.subheader("1. Order Summary")
         disp_cols = [order_col, 'Mother_Count', 'CGL_Total', 'CCL_Total', 'Delta_m', 'Thick_Var_mm', 'Extra_Area_m2']
         df_summary_disp = df_summary[disp_cols].sort_values(by='Extra_Area_m2', ascending=False).copy()
         df_summary_disp.columns = ['Order', 'Mothers', 'CGL (m)', 'CCL (m)', 'Delta (m)', 'Thick Var (mm)', 'Extra Area (m2)']
         
-        # Làm tròn và ép kiểu số nguyên cho số lượng và chiều dài
         df_summary_disp['Mothers'] = df_summary_disp['Mothers'].astype(int)
         df_summary_disp['CGL (m)'] = df_summary_disp['CGL (m)'].round(0).astype(int)
         df_summary_disp['CCL (m)'] = df_summary_disp['CCL (m)'].round(0).astype(int)
         
-        # Thêm cột STT
         df_summary_disp.insert(0, 'STT', range(1, len(df_summary_disp) + 1))
         df_summary_disp = df_summary_disp.set_index('STT')
 
-        # ÉP ĐỊNH DẠNG: Chỉ hiện đúng 2 số thập phân (riêng độ dày giữ 3 số vì nó rất nhỏ)
         styled_summary = df_summary_disp.style.format({
             "Delta (m)": "{:.2f}",
             "Thick Var (mm)": "{:.3f}", 
@@ -115,7 +112,6 @@ if 'saved_data' in st.session_state:
             df_detail_final = df_detail[d_cols].sort_values(by=mother_col).copy()
             df_detail_final.columns = ['Mother Coil', 'Baby Coil', 'CGL Thick', 'CCL Thick', 'Var (mm)', 'CCL Len (m)']
             
-            # Ép định dạng 3 số thập phân cho bảng chi tiết độ dày
             styled_detail = df_detail_final.style.format({
                 "CGL Thick": "{:.3f}",
                 "CCL Thick": "{:.3f}",
@@ -204,62 +200,66 @@ if 'saved_data' in st.session_state:
                 st.success("未檢測到明顯的長度短缺 (No significant length shortage detected).")
 
         # =============================
-        # 6. EXCEL EXPORT 
+        # 6. EXPORT SECTION (EXCEL & PDF CÙNG NHAU)
         # =============================
-        excel_data = io.BytesIO()
-        with pd.ExcelWriter(excel_data, engine='xlsxwriter') as writer:
-            # Lưu ý: file excel tải về cũng sẽ được làm tròn số cho đẹp
-            df_summary_export = df_summary_disp.copy()
-            df_summary_export['Delta (m)'] = df_summary_export['Delta (m)'].round(2)
-            df_summary_export['Extra Area (m2)'] = df_summary_export['Extra Area (m2)'].round(2)
-            df_summary_export.to_excel(writer, sheet_name='Summary')
+        st.divider()
+        st.subheader("📥 5. 匯出資料 (Export Reports)")
+        
+        # Tạo 2 cột để đặt 2 nút cạnh nhau cho đẹp
+        col_btn1, col_btn2 = st.columns([1, 1])
+        
+        with col_btn1:
+            excel_data = io.BytesIO()
+            with pd.ExcelWriter(excel_data, engine='xlsxwriter') as writer:
+                df_summary_export = df_summary_disp.copy()
+                df_summary_export['Delta (m)'] = df_summary_export['Delta (m)'].round(2)
+                df_summary_export['Extra Area (m2)'] = df_summary_export['Extra Area (m2)'].round(2)
+                df_summary_export.to_excel(writer, sheet_name='Summary')
+                if df_detail_final is not None:
+                    df_detail_final.to_excel(writer, sheet_name='Details', index=False)
             
-            if df_detail_final is not None:
-                df_detail_final.to_excel(writer, sheet_name='Details', index=False)
-        
-        st.divider()
-        st.subheader("📥 5. 匯出資料 (Export Report to Excel)")
-        st.markdown("Bấm vào nút bên dưới để tải toàn bộ bảng tổng hợp và chi tiết về máy:")
-        
-        st.download_button(
-            label="👉 TẢI XUỐNG FILE EXCEL 👈", 
-            data=excel_data.getvalue(), 
-            file_name="Paint_Yield_Report.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            type="primary"
-        )
+            st.download_button(
+                label="📊 Tải xuống Excel (Download Excel)", 
+                data=excel_data.getvalue(), 
+                file_name="Paint_Yield_Report.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                type="primary",
+                use_container_width=True
+            )
 
-        # =============================
-        # 7. PDF EXPORT (NÚT IN BÁO CÁO)
-        # =============================
-        st.divider()
-        st.subheader("🖨️ 6. 匯出 PDF (Export to PDF)")
-        st.markdown("Bấm nút bên dưới để mở giao diện in báo cáo. Vui lòng chọn **Save as PDF (Lưu dưới dạng PDF)** trong cửa sổ hiện ra.")
-        
-        components.html(
-            """
-            <script>
-            function printPage() {
-                window.parent.print();
-            }
-            </script>
-            <button onclick="printPage()" style="
-                padding: 10px 20px; 
-                font-size: 16px; 
-                font-weight: bold; 
-                background-color: #ff4b4b; 
-                color: white; 
-                border: none; 
-                border-radius: 5px; 
-                cursor: pointer;
-                width: 100%;
-                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            ">
-                🖨️ XUẤT FILE PDF / IN BÁO CÁO
-            </button>
-            """,
-            height=60
-        )
+        with col_btn2:
+            # Tạo nút bấm giống hệt hình ảnh yêu cầu bằng HTML/CSS
+            components.html(
+                """
+                <script>
+                function printPage() {
+                    window.parent.print();
+                }
+                </script>
+                <div style="display: flex; justify-content: center; width: 100%;">
+                    <button onclick="printPage()" style="
+                        background-color: white;
+                        color: #0066cc; /* Màu xanh nước biển */
+                        border: 1px solid #d3d3d3; /* Viền xám nhạt */
+                        border-radius: 6px;
+                        padding: 8px 16px;
+                        font-size: 15px;
+                        cursor: pointer;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        font-family: Arial, sans-serif;
+                        font-weight: 500;
+                        width: 100%;
+                        height: 40px;
+                        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+                    ">
+                        <span style="font-size: 18px; margin-right: 8px;">🖨️</span> Save as PDF Report
+                    </button>
+                </div>
+                """,
+                height=50
+            )
 
     except Exception as e:
         st.error(f"Logic Error: {e}")
