@@ -12,7 +12,7 @@ and Color Coating (CCL) baby coils to estimate hidden paint loss.
 
 uploaded_file = st.file_uploader("Upload Master Data File (.xlsx or .csv)", type=['xlsx', 'csv'])
 
-# dev_file_path = "data.xlsx" # <-- Uncomment this line and put your file name here if needed
+# dev_file_path = "data.xlsx" # <-- Bạn có thể bỏ comment dòng này để test không cần upload lại
 # uploaded_file = dev_file_path         
 
 if uploaded_file is not None:
@@ -22,7 +22,7 @@ if uploaded_file is not None:
         else:
             df_temp = pd.read_excel(uploaded_file) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file)
             
-        # DÒNG LỆNH MA THUẬT: Xóa sạch khoảng trắng thừa trong tên cột
+        # Xóa sạch khoảng trắng thừa trong tên cột để tránh lỗi không tìm thấy cột
         df_temp.columns = df_temp.columns.str.replace(r'\s+', '', regex=True)
         
         st.session_state['saved_data'] = df_temp 
@@ -33,7 +33,7 @@ if uploaded_file is not None:
 if 'saved_data' in st.session_state:
     df = st.session_state['saved_data'].copy()
     
-    # --- TÊN CỘT CHUẨN XÁC ---
+    # --- TÊN CỘT CHUẨN XÁC ĐÃ ĐƯỢC XÓA KHOẢNG TRẮNG ---
     order_col = "訂單號碼"
     mother_coil_col = "投入鋼捲號碼"
     baby_coil_col = "產出鋼捲號碼" 
@@ -76,10 +76,16 @@ if 'saved_data' in st.session_state:
         ]
         
         df_summary_display = df_summary[summary_display_cols].sort_values(by='Extra_Area_m2', ascending=False).copy()
-        df_summary_display.columns = [
-            'Order Number', 'CGL Total Length (m)', 'CCL Total Length (m)', 
-            'Delta Length (m)', 'Thickness Variance (mm)', 'Extra Area (m2)'
-        ]
+        
+        # CÁCH ĐỔI TÊN MỚI AN TOÀN TUYỆT ĐỐI (DÙNG DICTIONARY)
+        df_summary_display.rename(columns={
+            order_col: 'Order Number',
+            'CGL_Total_Length': 'CGL Total Length (m)',
+            'CCL_Total_Length': 'CCL Total Length (m)',
+            'Delta_Length': 'Delta Length (m)',
+            'Thickness_Variance': 'Thickness Variance (mm)',
+            'Extra_Area_m2': 'Extra Area (m2)'
+        }, inplace=True)
         
         st.dataframe(df_summary_display, use_container_width=True)
         st.divider()
@@ -94,33 +100,39 @@ if 'saved_data' in st.session_state:
         selected_order = st.selectbox("Select Order Number:", options=order_list)
         
         if selected_order:
-            # 2.1 TRÍCH XUẤT VÀ HIỂN THỊ CÁC THẺ TỔNG CỘNG (METRIC CARDS)
+            # HIỂN THỊ CÁC THẺ TỔNG CỘNG (METRIC CARDS)
             order_totals = df_summary[df_summary[order_col] == selected_order].iloc[0]
             
             st.markdown(f"**Length Summary for Order: {selected_order}**")
             col1, col2, col3 = st.columns(3)
-            col1.metric("Total Mother Coils Length (CGL)", f"{order_totals['CGL_Total_Length']:,.0f} m")
+            col1.metric("Total Mother Coils Length (CGL)", f"{order_totals['CCL_Total_Length'] - order_totals['Delta_Length']:,.0f} m")
             col2.metric("Total Baby Coils Length (CCL)", f"{order_totals['CCL_Total_Length']:,.0f} m")
             col3.metric("Length Variance (Delta)", f"{order_totals['Delta_Length']:,.0f} m", 
                         delta=f"{order_totals['Delta_Length']:,.0f} m", delta_color="inverse")
             
-            st.write("") # Tạo một chút khoảng trắng cho đẹp
+            st.write("") 
             
-            # 2.2 HIỂN THỊ BẢNG CHI TIẾT
+            # HIỂN THỊ BẢNG CHI TIẾT
             df_detail = df[df[order_col] == selected_order].copy()
             df_detail['Thickness_Variance'] = df_detail[ccl_thick] - df_detail[cgl_thick]
             
             try:
+                # Nếu bạn lỡ tay thêm cột vào đây (thành 7 cột), code vẫn chạy bình thường!
                 detail_display_cols = [
                     mother_coil_col, baby_coil_col, 
                     cgl_thick, ccl_thick, 'Thickness_Variance', ccl_len
                 ]
                 df_detail_display = df_detail[detail_display_cols].sort_values(by=mother_coil_col).copy()
                 
-                df_detail_display.columns = [
-                    'Mother Coil', 'Baby Coil', 
-                    'CGL Thickness', 'CCL Thickness', 'Thickness Variance', 'CCL Length (m)'
-                ]
+                # CÁCH ĐỔI TÊN MỚI AN TOÀN TUYỆT ĐỐI 
+                df_detail_display.rename(columns={
+                    mother_coil_col: 'Mother Coil',
+                    baby_coil_col: 'Baby Coil',
+                    cgl_thick: 'CGL Thickness',
+                    ccl_thick: 'CCL Thickness',
+                    'Thickness_Variance': 'Thickness Variance (mm)',
+                    ccl_len: 'CCL Length (m)'
+                }, inplace=True)
                 
                 st.dataframe(df_detail_display, use_container_width=True)
                 
