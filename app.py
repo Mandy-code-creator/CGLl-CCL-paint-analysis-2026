@@ -6,7 +6,7 @@ import io
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="Paint Yield Analyzer", layout="wide")
 
-# --- CSS FOR PRINTING (Fixes cutoff issues) ---
+# --- CSS FOR PRINTING ---
 st.markdown("""
     <style>
     @media print {
@@ -29,7 +29,6 @@ uploaded_file = st.file_uploader("Upload Master Data File (.xlsx or .csv)", type
 if uploaded_file is not None:
     try:
         df_temp = pd.read_excel(uploaded_file) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file)
-        # Remove whitespaces and duplicates in column names
         df_temp.columns = df_temp.columns.str.replace(r'\s+', '', regex=True)
         df_temp = df_temp.loc[:, ~df_temp.columns.duplicated()]
         st.session_state['saved_data'] = df_temp
@@ -58,7 +57,7 @@ if 'saved_data' in st.session_state:
 
             # STEP 2: Aggregate by Order
             step2_agg = {
-                mother_col: 'count', # Count unique mother coils
+                mother_col: 'count', 
                 cgl_thick: 'mean', cgl_width: 'mean', cgl_len: 'sum',
                 ccl_thick: 'mean', ccl_width: 'mean', ccl_len: 'sum'
             }
@@ -75,13 +74,15 @@ if 'saved_data' in st.session_state:
             df_summary['Extra_Area_m2'] = (df_summary[ccl_width] / 1000) * df_summary['Delta_m']
 
         # =============================
-        # 3. TABLES (Print-friendly)
+        # 3. TABLES (Print-friendly & Full Data)
         # =============================
         st.subheader("1. Order Summary")
         disp_cols = [order_col, 'Mother_Count', 'CGL_Total', 'CCL_Total', 'Delta_m', 'Thick_Var_mm', 'Extra_Area_m2']
         df_summary_disp = df_summary[disp_cols].sort_values(by='Extra_Area_m2', ascending=False).copy()
         df_summary_disp.columns = ['Order', 'Mothers', 'CGL (m)', 'CCL (m)', 'Delta (m)', 'Thick Var (mm)', 'Extra Area (m2)']
-        st.table(df_summary_disp.head(30)) 
+        
+        # Đã xóa .head(30) để hiển thị TOÀN BỘ dữ liệu
+        st.table(df_summary_disp) 
 
         st.divider()
         st.subheader("2. Baby Coil Details")
@@ -101,6 +102,8 @@ if 'saved_data' in st.session_state:
             d_cols = [mother_col, baby_col, cgl_thick, ccl_thick, 'Thickness_Variance', ccl_len]
             df_detail_final = df_detail[d_cols].sort_values(by=mother_col).copy()
             df_detail_final.columns = ['Mother Coil', 'Baby Coil', 'CGL Thick', 'CCL Thick', 'Var (mm)', 'CCL Len (m)']
+            
+            # Đảm bảo bảng chi tiết cũng hiển thị toàn bộ
             st.table(df_detail_final)
 
         # =============================
@@ -108,16 +111,14 @@ if 'saved_data' in st.session_state:
         # =============================
         st.divider()
         st.subheader("3. Visual Analysis")
-        # Bar Chart
+        
         fig1 = px.bar(df_summary_disp, x='Order', y='Extra Area (m2)', color='Delta (m)', text='Extra Area (m2)', title="Extra Painted Area per Order")
         st.plotly_chart(fig1, use_container_width=True)
 
-        # Histogram
         fig2 = px.histogram(df_summary_disp, x='Delta (m)', nbins=20, title="Distribution of Elongation")
         st.plotly_chart(fig2, use_container_width=True)
 
-        # Scatter
-        fig3 = px.scatter(df_summary, x='Thick_Var_mm', y='Delta_m', color='Extra_Area_m2', hover_data=[order_col], title="Thickness vs Length Delta")
+        fig3 = px.scatter(df_summary, x='Thick_Var_mm', y='Delta_m', color='Extra_Area_m2', hover_data=['Order'], title="Thickness vs Length Delta")
         st.plotly_chart(fig3, use_container_width=True)
 
         # =============================
