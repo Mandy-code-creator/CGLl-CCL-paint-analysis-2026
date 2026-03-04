@@ -10,7 +10,7 @@ st.set_page_config(page_title="Steel Yield Insight", layout="wide")
 # ==========================================================
 # 1. AUTO-SYNC CONFIGURATION (INSERT YOUR LINK HERE)
 # ==========================================================
-GSHEET_URL = "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
+GSHEET_URL = "https://docs.google.com/spreadsheets/d/1-kayrLVYwOO66Xxc7Vk7dbTNZ5Aph4MVd9DMTz6RJS0/edit?gid=0#gid=0"
 
 # --- MINIMALIST DESIGN & UNIFORM GRID LINES ---
 st.markdown("""
