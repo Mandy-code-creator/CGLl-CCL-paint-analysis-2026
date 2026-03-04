@@ -53,7 +53,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.title("Steel Production Yield Analytics")
+st.title("Production Yield Analysis & Variance Control System-Paint code 4890")
 
 # --- DATA FETCHING ---
 @st.cache_data(ttl=300)
