@@ -36,7 +36,7 @@ st.title("📊 Steel Production Yield Analytics")
 st.subheader("🔗 數據來源 (Data Source)")
 gsheet_url = st.text_input(
     "Dán Link Google Sheets của bạn vào đây (Phải để chế độ 'Anyone with the link can view'):",
-    placeholder="https://docs.google.com/spreadsheets/d/your-id/edit#gid=0"
+    placeholder="https://docs.google.com/spreadsheets/d/1-kayrLVYwOO66Xxc7Vk7dbTNZ5Aph4MVd9DMTz6RJS0/edit?gid=0#gid=0"
 )
 
 def get_google_sheet_data(url):
