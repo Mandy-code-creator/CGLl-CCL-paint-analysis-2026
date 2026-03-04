@@ -71,6 +71,7 @@ if 'saved_data' in st.session_state:
             df_summary['Extra_Area_m2'] = (df_summary[ccl_width] / 1000) * df_summary['Delta_m']
 
         # =============================
+       # =============================
         # 3. TABLES
         # =============================
         st.subheader("1. Order Summary")
@@ -78,28 +79,25 @@ if 'saved_data' in st.session_state:
         df_summary_disp = df_summary[disp_cols].sort_values(by='Extra_Area_m2', ascending=False).copy()
         df_summary_disp.columns = ['Order', 'Mothers', 'CGL (m)', 'CCL (m)', 'Delta (m)', 'Thick Var (mm)', 'Extra Area (m2)']
         
-        st.table(df_summary_disp) 
+        # 1. Bỏ số thập phân cho các dữ liệu tổng (làm tròn và ép kiểu về số nguyên int)
+        df_summary_disp['Mothers'] = df_summary_disp['Mothers'].astype(int)
+        df_summary_disp['CGL (m)'] = df_summary_disp['CGL (m)'].round(0).astype(int)
+        df_summary_disp['CCL (m)'] = df_summary_disp['CCL (m)'].round(0).astype(int)
+        
+        # 2. Giữ lại số thập phân cho các cột tính chênh lệch
+        df_summary_disp['Delta (m)'] = df_summary_disp['Delta (m)'].round(2)
+        df_summary_disp['Thick Var (mm)'] = df_summary_disp['Thick Var (mm)'].round(3) # Độ dày cần 3 số thập phân
+        df_summary_disp['Extra Area (m2)'] = df_summary_disp['Extra Area (m2)'].round(2)
+
+        # 3. Thêm cột Số Thứ Tự (STT) vào vị trí đầu tiên (vị trí 0)
+        df_summary_disp.insert(0, 'STT', range(1, len(df_summary_disp) + 1))
+        
+        # 4. Hiển thị bảng: Dùng hàm set_index('STT') để giấu cột index mặc định của Pandas
+        st.table(df_summary_disp.set_index('STT')) 
 
         st.divider()
         st.subheader("2. Baby Coil Details")
         selected_order = st.selectbox("Select Order Number:", options=df[order_col].unique())
-
-        df_detail_final = None
-        if selected_order:
-            row = df_summary[df_summary[order_col] == selected_order].iloc[0]
-            st.markdown(f"**Performance for Order: {selected_order} ({int(row['Mother_Count'])} Mother Coils)**")
-            c1, c2, c3 = st.columns(3)
-            c1.metric("CGL Total (Input)", f"{row['CGL_Total']:,.0f} m")
-            c2.metric("CCL Total (Output)", f"{row['CCL_Total']:,.0f} m")
-            c3.metric("Elongation (Delta)", f"{row['Delta_m']:,.0f} m", delta=f"{row['Delta_m']:,.0f} m", delta_color="inverse")
-            
-            df_detail = df[df[order_col] == selected_order].copy()
-            df_detail['Thickness_Variance'] = df_detail[ccl_thick] - df_detail[cgl_thick]
-            d_cols = [mother_col, baby_col, cgl_thick, ccl_thick, 'Thickness_Variance', ccl_len]
-            df_detail_final = df_detail[d_cols].sort_values(by=mother_col).copy()
-            df_detail_final.columns = ['Mother Coil', 'Baby Coil', 'CGL Thick', 'CCL Thick', 'Var (mm)', 'CCL Len (m)']
-            
-            st.table(df_detail_final)
 
         # =============================
         # =============================
