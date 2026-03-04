@@ -116,11 +116,29 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
             disp['Mothers'] = disp['Mothers'].astype(int)
             disp.insert(0, 'No.', range(1, len(disp) + 1))
             
+            # TẠO KHUNG CÓ THANH KÉO (SCROLL BAR)
+            st.markdown("""
+                <style>
+                .scrollable-table-container {
+                    max-height: 400px;
+                    overflow-y: auto;
+                    border: 1px solid #e2e8f0;
+                }
+                thead tr th {
+                    position: sticky;
+                    top: 0;
+                    z-index: 1;
+                    background-color: #f8fafc !important;
+                }
+                </style>
+                """, unsafe_allow_html=True)
+
+            st.markdown('<div class="scrollable-table-container">', unsafe_allow_html=True)
             st.table(disp.set_index('No.').style.format({
                 "Input (m)": "{:,.0f}", "Output (m)": "{:,.0f}",
                 "Diff (m)": "{:.2f}", "Thick Var": "{:.3f}", "Diff Area (m²)": "{:.2f}"
             }))
-
+            st.markdown('</div>', unsafe_allow_html=True)
             # --- 2. BABY COIL DETAILS ---
             st.divider()
             st.subheader("2. Baby Coil Details")
