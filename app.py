@@ -117,31 +117,45 @@ if 'saved_data' in st.session_state:
         st.plotly_chart(fig3, use_container_width=True)
 
         # =============================
-        # 5. CONCLUSION (PHẦN MỚI THÊM VÀO)
+        # =============================
+        # 5. CONCLUSION (ĐÃ SỬA LOGIC VÀ THÊM MÀU ĐỎ)
         # =============================
         st.divider()
         st.subheader("💡 4. Executive Summary & Conclusion")
         
-        # Calculate totals for the conclusion
+        # Tính toán tổng hợp
         total_input = df_summary_disp['CGL (m)'].sum()
         total_output = df_summary_disp['CCL (m)'].sum()
         total_elongation = df_summary_disp['Delta (m)'].sum()
-        total_paint_loss_area = df_summary_disp['Extra Area (m2)'].sum()
+        
+        # BỘ LỌC THÔNG MINH: Chỉ tính hao hụt cho các đơn hàng thực sự bị giãn dài (Extra Area > 0)
+        positive_loss_df = df_summary_disp[df_summary_disp['Extra Area (m2)'] > 0]
+        total_paint_loss_area = positive_loss_df['Extra Area (m2)'].sum()
         
         if not df_summary_disp.empty:
-            worst_order = df_summary_disp.iloc[0]['Order']
-            worst_area = df_summary_disp.iloc[0]['Extra Area (m2)']
-            
             st.markdown(f"""
             **Overall Production Performance:**
             * **Total Processed:** The plant processed **{total_input:,.0f} m** of input steel (CGL), resulting in **{total_output:,.0f} m** of output steel (CCL).
             * **Net Elongation:** Across all analyzed orders, there is a total net elongation of **{total_elongation:,.0f} m**.
-            * **Estimated Paint Waste:** This elongation equates to **{total_paint_loss_area:,.2f} m²** of extra surface area that consumed paint without adding value.
-
-            **Actionable Insight:**
-            * ⚠️ **Order `{worst_order}`** is the primary contributor to paint loss, generating **{worst_area:,.2f} m²** of extra area. 
-            * **Recommendation:** Quality Control and Production teams should review the tension settings and process parameters on the CCL line specifically for this order type.
+            * **Estimated Paint Waste:** Focusing only on elongated coils, there is an estimated **{total_paint_loss_area:,.2f} m²** of extra surface area consuming paint.
             """)
+
+            # Tìm thủ phạm tốn sơn nhất (chỉ tìm trong nhóm số dương)
+            if not positive_loss_df.empty:
+                worst_order = positive_loss_df.sort_values(by='Extra Area (m2)', ascending=False).iloc[0]['Order']
+                worst_area = positive_loss_df.sort_values(by='Extra Area (m2)', ascending=False).iloc[0]['Extra Area (m2)']
+                
+                st.markdown(f"""
+                **Actionable Insight:**
+                * ⚠️ **Order `{worst_order}`** is the primary contributor to paint loss, generating **<span style='color:red'>{worst_area:,.2f} m²</span>** of extra area. 
+                * **Recommendation:** Quality Control and Production teams should review the tension settings and process parameters on the CCL line specifically for this order type.
+                """, unsafe_allow_html=True)
+            else:
+                # Nếu không có đơn hàng nào bị giãn dài
+                st.markdown("""
+                **Actionable Insight:**
+                * ✅ **Great news!** No orders in this batch showed positive elongation. Paint yield is highly optimized, or length reductions were due to scrap trimming.
+                """)
 
         # =============================
         # 6. EXCEL EXPORT
