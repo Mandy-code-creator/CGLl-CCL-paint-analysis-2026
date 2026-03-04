@@ -121,41 +121,40 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
                 "Diff (m)": "{:.2f}", "Thick Var": "{:.3f}", "Diff Area (m²)": "{:.2f}"
             }))
 
-            # --- 2. BABY COIL DETAILS ---
-            st.divider()
-            st.subheader("2. Baby Coil Details")
-            sel_order = st.selectbox("Select Order ID to view details:", options=df[order_c].unique())
-            
+           # --- 2. BABY COIL DETAILS ---
             if sel_order:
-                # Lấy dữ liệu chi tiết của đơn hàng đã chọn
                 det = df[df[order_c] == sel_order].copy()
-                
-                # Tính toán sai lệch độ dày (CCL - CGL)
                 det['Var'] = det[ccl_t] - det[cgl_t]
                 
-                # Chọn và sắp xếp các cột bao gồm kích thước cuộn mẹ (CGL) và cuộn con (CCL)
-                # Cột cuộn mẹ: CGL Thick, CGL Width, CGL Length
+                # Bổ sung thêm cột ccl_w (Chiều rộng cuộn con)
                 det_f = det[[
                     mother_c, baby_c, 
-                    cgl_t, cgl_w, cgl_l,  # Kích thước cuộn mẹ
-                    ccl_t, 'Var', ccl_l   # Kích thước cuộn con
+                    cgl_t, cgl_w, cgl_l,  # Dữ liệu cuộn mẹ (CGL)
+                    ccl_t, ccl_w, 'Var', ccl_l   # Dữ liệu cuộn con (CCL)
                 ]].copy()
                 
-                # Đặt lại tên cột cho chuyên nghiệp (Tiếng Anh theo yêu cầu của bạn)
+                # Đặt tên cột chi tiết để sếp dễ theo dõi
                 det_f.columns = [
-                    'Mother Coil', 'Baby Coil', 
-                    'Mother Thick', 'Mother Width', 'Mother Length', 
-                    'Baby Thick', 'Thick Var', 'Baby Length'
+                    'Mother Coil ID', 
+                    'Baby Coil ID', 
+                    'Mother Actual Thick (mm)', 
+                    'Mother Actual Width (mm)', 
+                    'Mother Actual Length (m)', 
+                    'Baby Actual Thick (mm)', 
+                    'Baby Actual Width (mm)', # Cột mới thêm
+                    'Thickness Deviation (mm)', 
+                    'Baby Actual Length (m)'
                 ]
                 
-                # Hiển thị bảng với định dạng số phù hợp
+                # Hiển thị bảng với định dạng số chuẩn
                 st.table(det_f.style.format({
-                    "Mother Thick": "{:.3f}", 
-                    "Mother Width": "{:,.0f}", 
-                    "Mother Length": "{:,.0f}",
-                    "Baby Thick": "{:.3f}", 
-                    "Thick Var": "{:.3f}", 
-                    "Baby Length": "{:,.0f}"
+                    "Mother Actual Thick (mm)": "{:.3f}", 
+                    "Mother Actual Width (mm)": "{:,.0f}", 
+                    "Mother Actual Length (m)": "{:,.0f}",
+                    "Baby Actual Thick (mm)": "{:.3f}", 
+                    "Baby Actual Width (mm)": "{:,.0f}",
+                    "Thickness Deviation (mm)": "{:.3f}", 
+                    "Baby Actual Length (m)": "{:,.0f}"
                 }))
 
             # --- 3. VISUAL INSIGHTS (CONCLUSIONS IN CHINESE) ---
