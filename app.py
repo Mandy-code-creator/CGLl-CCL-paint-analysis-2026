@@ -117,17 +117,17 @@ if 'saved_data' in st.session_state:
         st.plotly_chart(fig3, use_container_width=True)
 
         # =============================
-       # =============================
-        # 5. CONCLUSION (PHÂN TÍCH TOÀN DIỆN 2 CHIỀU)
+      # =============================
+        # 5. CONCLUSION (OBJECTIVE YIELD INSIGHTS)
         # =============================
         st.divider()
-        st.subheader("💡 4. Executive Summary & Paint Yield Insights")
+        st.subheader("💡 4. Executive Summary & Yield Insights")
         
         # Tính toán tổng hợp
         total_input = df_summary_disp['CGL (m)'].sum()
         total_output = df_summary_disp['CCL (m)'].sum()
         
-        # Tách hai loại hao hụt (Giãn dài vs Hụt mét)
+        # Tách hai loại chênh lệch: Giãn dài (Positive) và Hụt mét (Negative)
         elongation_df = df_summary_disp[df_summary_disp['Delta (m)'] > 0]
         shortage_df = df_summary_disp[df_summary_disp['Delta (m)'] < 0]
         
@@ -135,28 +135,28 @@ if 'saved_data' in st.session_state:
         total_shortage_area = abs(shortage_df['Extra Area (m2)'].sum()) if not shortage_df.empty else 0
 
         st.markdown(f"""
-        **Overall Production Yield:**
+        **Overall Production Metrics:**
         * **Input vs Output:** Processed **{total_input:,.0f} m** (CGL) to produce **{total_output:,.0f} m** (CCL).
-        * 📈 **Type 1 Loss (Elongation):** **{total_elong_area:,.2f} m²** of extra painted area due to steel stretching (consuming extra paint).
-        * 📉 **Type 2 Loss (Shortage/Scrap):** **{total_shortage_area:,.2f} m²** of painted area lost due to output falling short of input (likely scrapped or trimmed).
+        * 📈 **Positive Elongation:** **{total_elong_area:,.2f} m²** of extra surface area created due to steel stretching. This directly represents extra paint consumption.
+        * 📉 **Length Shortfall:** **{total_shortage_area:,.2f} m²** of equivalent area where the output length was less than the input. The exact cause (sensor variance, unrecorded scrap, or sample cuts) requires further investigation.
         """)
 
-        # Hiển thị 2 thủ phạm lớn nhất cho 2 loại lỗi
+        # Hiển thị 2 đơn hàng có độ lệch lớn nhất theo hướng khách quan
         col1, col2 = st.columns(2)
         
         with col1:
-            st.markdown("🔴 **Top Loss by Elongation (Giãn dài):**")
+            st.markdown("🔴 **Top Positive Elongation (Giãn dài nhiều nhất):**")
             if not elongation_df.empty:
                 worst_elong = elongation_df.sort_values(by='Extra Area (m2)', ascending=False).iloc[0]
-                st.info(f"Order **`{worst_elong['Order']}`** stretched by {worst_elong['Delta (m)']:,.0f} m, causing **{worst_elong['Extra Area (m2)']:,.2f} m²** of hidden paint loss.")
+                st.info(f"Order **`{worst_elong['Order']}`** stretched by {worst_elong['Delta (m)']:,.0f} m, generating **{worst_elong['Extra Area (m2)']:,.2f} m²** of extra painted area.")
             else:
                 st.success("No significant elongation detected.")
                 
         with col2:
-            st.markdown("🟠 **Top Loss by Shortage (Hụt mét/Phế):**")
+            st.markdown("🟠 **Top Length Shortfall (Hụt mét chưa rõ nguyên nhân):**")
             if not shortage_df.empty:
                 worst_short = shortage_df.sort_values(by='Extra Area (m2)', ascending=True).iloc[0] # Lấy số âm lớn nhất
-                st.warning(f"Order **`{worst_short['Order']}`** fell short by {abs(worst_short['Delta (m)']):,.0f} m, wasting **{abs(worst_short['Extra Area (m2)']):,.2f} m²** of budgeted paint capacity.")
+                st.warning(f"Order **`{worst_short['Order']}`** fell short by {abs(worst_short['Delta (m)']):,.0f} m, representing an unexplained area variance of **{abs(worst_short['Extra Area (m2)']):,.2f} m²**.")
             else:
                 st.success("No significant length shortage detected.")
         # =============================
