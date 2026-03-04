@@ -10,16 +10,10 @@ This application analyzes the length variance between Galvanizing (CGL) mother c
 and Color Coating (CCL) baby coils to estimate hidden paint loss.
 """)
 
-# ==========================================
-# FILE UPLOAD & DEVELOPMENT MODE
-# ==========================================
-# Trick: If you are tired of re-uploading during coding, comment out the st.file_uploader line 
-# and uncomment the dev_file_path line with your actual file name.
-
 uploaded_file = st.file_uploader("Upload Master Data File (.xlsx or .csv)", type=['xlsx', 'csv'])
 
-# dev_file_path = "your_data_file.xlsx" # <-- Uncomment this line and put your file name here
-# uploaded_file = dev_file_path         # <-- Uncomment this line
+# dev_file_path = "data.xlsx" # <-- Uncomment this line and put your file name here if needed
+# uploaded_file = dev_file_path         
 
 if uploaded_file is not None:
     try:
@@ -36,12 +30,10 @@ if uploaded_file is not None:
 if 'saved_data' in st.session_state:
     df = st.session_state['saved_data'].copy()
     
-    # --- DATA COLUMNS (KEEPING ORIGINAL CHINESE HEADERS FOR PARSING) ---
+    # --- CẬP NHẬT TÊN CỘT CHÍNH XÁC TỪ ẢNH CỦA BẠN ---
     order_col = "訂單號碼"
     mother_coil_col = "投入鋼捲號碼"
-    
-    # PLEASE UPDATE THIS TO MATCH YOUR BABY COIL COLUMN NAME
-    baby_coil_col = "子鋼捲號碼" 
+    baby_coil_col = "產出鋼捲號碼" # <-- Đã sửa tên cột chính xác ở đây!
     
     cgl_thick = "镀锌實測厚度"
     cgl_width = "镀锌測寬度"
@@ -74,7 +66,7 @@ if 'saved_data' in st.session_state:
             df_summary['Extra_Area_m2'] = (df_summary[ccl_width] / 1000) * df_summary['Delta_Length']
 
         # ==========================================
-        # SECTION 1: ORDER SUMMARY (SIMPLIFIED)
+        # SECTION 1: ORDER SUMMARY 
         # ==========================================
         st.subheader("1. Order Summary")
         
@@ -87,7 +79,6 @@ if 'saved_data' in st.session_state:
             'Extra_Area_m2'
         ]
         
-        # Translate headers to English for the UI display
         df_summary_display = df_summary[summary_display_cols].sort_values(by='Extra_Area_m2', ascending=False).copy()
         df_summary_display.columns = [
             'Order Number', 'CGL Total Length (m)', 'CCL Total Length (m)', 
@@ -99,7 +90,7 @@ if 'saved_data' in st.session_state:
         st.divider()
 
         # ==========================================
-        # SECTION 2: BABY COIL DETAILS (SIMPLIFIED)
+        # SECTION 2: BABY COIL DETAILS 
         # ==========================================
         st.subheader("2. Baby Coil Details")
         st.markdown("Select an order to view the thickness variance analysis for individual baby coils.")
@@ -112,14 +103,14 @@ if 'saved_data' in st.session_state:
             df_detail['Thickness_Variance'] = df_detail[ccl_thick] - df_detail[cgl_thick]
             
             try:
-                # Select only analysis-relevant columns
+                # Bảng chi tiết bây giờ sẽ chỉ hiện đúng 6 cột này
                 detail_display_cols = [
                     mother_coil_col, baby_coil_col, 
                     cgl_thick, ccl_thick, 'Thickness_Variance', ccl_len
                 ]
                 df_detail_display = df_detail[detail_display_cols].sort_values(by=mother_coil_col).copy()
                 
-                # Rename columns to clean English for the UI
+                # Đổi tên cột sang tiếng Anh cho gọn gàng và chuyên nghiệp
                 df_detail_display.columns = [
                     'Mother Coil', 'Baby Coil', 
                     'CGL Thickness', 'CCL Thickness', 'Thickness Variance', 'CCL Length (m)'
@@ -127,13 +118,13 @@ if 'saved_data' in st.session_state:
                 
                 st.dataframe(df_detail_display, use_container_width=True)
                 
-            except KeyError:
-                st.warning("Could not find the baby coil column. Please update the `baby_coil_col` variable in the code with the exact column name from your Excel file.")
+            except KeyError as e:
+                st.warning(f"Warning: Could not find column {e}. Showing full table instead.")
                 st.dataframe(df_detail)
 
     except KeyError as e:
         st.error(f"Missing column in your file: {e}")
-        st.info("Please ensure the uploaded file contains the correct Chinese column names.")
+        st.info("Please ensure the uploaded file contains the correct column names.")
     except Exception as e:
         st.error(f"An unexpected error occurred: {e}")
 
