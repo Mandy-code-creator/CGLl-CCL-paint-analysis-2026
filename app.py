@@ -134,21 +134,17 @@ if 'saved_data' in st.session_state:
         fig1.update_layout(xaxis_tickangle=-45)
         st.plotly_chart(fig1, use_container_width=True)
 
-        st.subheader("4. Distribution of Length Variance")
-        fig2 = px.histogram(df_summary_display,
-                            x='Delta Length (m)',
-                            nbins=20,
-                            title="Distribution of Delta Length (CCL - CGL)")
-        st.plotly_chart(fig2, use_container_width=True)
-
-        st.subheader("5. Thickness vs Length Variance Heatmap")
-        fig3 = px.scatter(df_summary,
-                          x='Thickness_Variance',
-                          y='Delta_Length',
-                          color='Extra_Area_m2',
-                          hover_data=[order_col],
-                          title="Thickness Variance vs Length Delta")
-        st.plotly_chart(fig3, use_container_width=True)
+        st.subheader("4. Download Plotly Chart PNG")
+        try:
+            chart_png = fig1.to_image(format="png", width=700, height=400, scale=2)
+            st.download_button(
+                label="📥 Download Chart as PNG",
+                data=chart_png,
+                file_name="Paint_Yield_Chart.png",
+                mime="image/png"
+            )
+        except Exception:
+            st.warning("Cannot export chart PNG: Kaleido / Chrome not available on web environment.")
 
         # =============================
         # OUTLIER ALERTS
@@ -161,9 +157,9 @@ if 'saved_data' in st.session_state:
             st.dataframe(outliers[[order_col, 'Delta_Length', 'Extra_Area_m2']])
 
         # =============================
-        # EXPORT REPORTS
+        # EXPORT EXCEL & PDF
         # =============================
-        st.subheader("6. Export Reports")
+        st.subheader("5. Export Reports")
 
         # --- EXCEL ---
         excel_buffer = io.BytesIO()
@@ -181,11 +177,9 @@ if 'saved_data' in st.session_state:
         except ModuleNotFoundError:
             st.warning("Excel export unavailable: Please install 'XlsxWriter'.")
 
-        # --- PDF ---
+        # --- PDF (web-safe) ---
         try:
             from fpdf import FPDF
-            import plotly.io as pio
-
             pdf = FPDF()
             pdf.add_page()
             pdf.set_font("Arial", "B", 16)
@@ -202,23 +196,19 @@ if 'saved_data' in st.session_state:
                 pdf.set_font("Arial", "", 12)
                 pdf.multi_cell(0, 5, df_detail_display.to_string(index=False))
 
-            # Export first chart as image
-            fig_img = pio.to_image(fig1, format='png', width=700, height=400, scale=2)
-            pdf.ln(5)
-            pdf.image(io.BytesIO(fig_img), x=10, w=190)
-
             pdf_buffer = io.BytesIO()
             pdf.output(pdf_buffer)
             pdf_buffer.seek(0)
 
             st.download_button(
-                label="📥 Download PDF Report",
+                label="📥 Download PDF Report (Table Only)",
                 data=pdf_buffer,
                 file_name="Paint_Yield_Report.pdf",
                 mime="application/pdf"
             )
+            st.info("PDF contains tables only. Charts cannot be embedded on web environment without Chrome/Kaleido.")
         except ModuleNotFoundError:
-            st.warning("PDF export unavailable: Please install 'fpdf' and 'kaleido'.")
+            st.warning("PDF export unavailable: Please install 'fpdf'.")
 
     except KeyError as e:
         st.error(f"Missing column in your file: {e}")
