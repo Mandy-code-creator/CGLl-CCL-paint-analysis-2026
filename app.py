@@ -11,7 +11,7 @@ st.set_page_config(page_title="Steel Yield Insight", layout="wide")
 # 1. CẤU HÌNH LINK TỰ ĐỘNG (THAY LINK CỦA BẠN TẠI ĐÂY)
 # ==========================================================
 # Dán link Google Sheets của bạn vào giữa hai dấu ngoặc kép dưới đây:
-GSHEET_URL = "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
+GSHEET_URL = "https://docs.google.com/spreadsheets/d/1-kayrLVYwOO66Xxc7Vk7dbTNZ5Aph4MVd9DMTz6RJS0/edit?gid=0#gid=0"
 
 # --- THIẾT KẾ LUXURY & LẰN KẺ NGANG SIÊU MẢNH ---
 st.markdown("""
