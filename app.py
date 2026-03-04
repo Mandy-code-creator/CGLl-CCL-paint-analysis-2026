@@ -10,9 +10,9 @@ st.set_page_config(page_title="Steel Yield Insight", layout="wide")
 # ==========================================================
 # 1. AUTO-SYNC CONFIGURATION (INSERT YOUR LINK HERE)
 # ==========================================================
-GSHEET_URL = "https://docs.google.com/spreadsheets/d/1-kayrLVYwOO66Xxc7Vk7dbTNZ5Aph4MVd9DMTz6RJS0/edit?gid=0#gid=0"
+GSHEET_URL = "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
 
-# --- MINIMALIST ENGLISH UI & THIN HORIZONTAL LINES ---
+# --- MINIMALIST DESIGN: UNIFORM GRID LINES ---
 st.markdown("""
     <style>
     .stApp { background-color: #ffffff; }
@@ -26,41 +26,43 @@ st.markdown("""
 
     h1, h2, h3 { color: #1e3a8a; font-family: 'Segoe UI', sans-serif; font-weight: 700 !important; }
 
-    /* MINIMALIST TABLE DESIGN: ONLY THIN GREY HORIZONTAL LINES */
+    /* UNIFORM GRID DESIGN: ALL CELLS HAVE THIN LINES */
     table { 
         width: 100% !important; 
         border-collapse: collapse !important; 
         font-family: 'Segoe UI', sans-serif;
         color: #334155;
+        border: 1px solid #e2e8f0 !important;
     }
     th { 
-        border-bottom: 1.5px solid #1e3a8a !important; 
+        border: 1px solid #e2e8f0 !important; 
         color: #1e3a8a !important; 
         text-align: center !important; 
         padding: 12px 8px !important;
         font-size: 13px !important;
-        background-color: transparent !important;
+        background-color: #f8fafc !important;
     }
     td { 
         text-align: center !important; 
         padding: 10px 8px !important; 
-        border-bottom: 0.5px solid #e2e8f0 !important; /* Minimalist thin line */
+        border: 1px solid #e2e8f0 !important; 
         font-size: 13px !important;
     }
-    tr:hover { background-color: #f8fafc; }
+    tr:hover { background-color: #f1f5f9; }
 
     /* Hide elements during PDF print */
     @media print {
         header, .stSidebar, .stButton, [data-testid="stHeader"], .stDivider, .stTextInput { display: none !important; }
         .main .block-container { max-width: 100% !important; padding: 0.5cm !important; }
-        div[data-testid="stVerticalBlock"] > div { border: none !important; }
+        table { border: 1px solid #000 !important; }
+        th, td { border: 0.5pt solid #ccc !important; }
     }
     </style>
     """, unsafe_allow_html=True)
 
 st.title("Steel Production Yield Analytics")
 
-# --- DATA FETCHING FUNCTION ---
+# --- DATA FETCHING ---
 @st.cache_data(ttl=300)
 def load_auto_data(url):
     try:
@@ -75,97 +77,99 @@ def load_auto_data(url):
             return df
         return None
     except Exception as e:
-        st.error(f"Connection Error: Please check link permissions. Error: {e}")
+        st.error(f"Connection Error: Check link permissions. Error: {e}")
         return None
 
 # =============================
-# 2. CORE LOGIC (STRICTLY ENGLISH)
+# 2. CORE LOGIC
 # =============================
 if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY":
     df = load_auto_data(GSHEET_URL)
     
     if df is not None:
-        order_col, mother_col, baby_col = "訂單號碼", "投入鋼捲號碼", "產出鋼捲號碼"
-        cgl_thick, cgl_width, cgl_len = "镀锌實測厚度", "镀锌測寬度", "镀锌測長度"
-        ccl_thick, ccl_width, ccl_len = "實測厚度", "實測寬度", "實測長度"
+        # Internal column mapping
+        order_c, mother_c, baby_c = "訂單號碼", "投入鋼捲號碼", "產出鋼捲號碼"
+        cgl_t, cgl_w, cgl_l = "镀锌實測厚度", "镀锌測寬度", "镀锌測長度"
+        ccl_t, ccl_w, ccl_l = "實測厚度", "實測寬度", "實測長度"
 
         try:
-            # Processing Summary
-            step1 = df.groupby([order_col, mother_col]).agg({
-                cgl_thick: 'mean', cgl_width: 'mean', cgl_len: 'first',
-                ccl_thick: 'mean', ccl_width: 'mean', ccl_len: 'sum'
+            # Aggregate Logic
+            s1 = df.groupby([order_c, mother_c]).agg({
+                cgl_t: 'mean', cgl_w: 'mean', cgl_l: 'first',
+                ccl_t: 'mean', ccl_w: 'mean', ccl_l: 'sum'
             }).reset_index()
 
-            df_summary = step1.groupby(order_col).agg({
-                mother_col: 'count', cgl_len: 'sum', ccl_len: 'sum', 
-                cgl_width: 'mean', cgl_thick: 'mean', ccl_thick: 'mean'
+            summary = s1.groupby(order_c).agg({
+                mother_c: 'count', cgl_l: 'sum', ccl_l: 'sum', 
+                ccl_t: 'mean', cgl_t: 'mean', cgl_w: 'mean'
             }).reset_index()
 
-            df_summary = df_summary.rename(columns={
-                mother_col: 'Qty', cgl_len: 'In_m', ccl_len: 'Out_m'
-            })
-
-            df_summary['Diff'] = df_summary['Out_m'] - df_summary['In_m']
-            df_summary['Thick_Var'] = df_summary[ccl_thick] - df_summary[cgl_thick]
-            df_summary['Area_m2'] = (df_summary[cgl_width] / 1000) * df_summary['Diff']
+            summary = summary.rename(columns={mother_c: 'Qty', cgl_l: 'In_m', ccl_l: 'Out_m'})
+            summary['Diff'] = summary['Out_m'] - summary['In_m']
+            summary['Thick_Var'] = summary[ccl_t] - summary[cgl_t]
+            summary['Area_m2'] = (summary[cgl_w] / 1000) * summary['Diff']
 
             # --- 1. ORDER SUMMARY ---
             st.subheader("1. Order Summary")
-            sum_disp = df_summary[[order_col, 'Qty', 'In_m', 'Out_m', 'Diff', 'Thick_Var', 'Area_m2']].copy()
+            disp = summary[[order_c, 'Qty', 'In_m', 'Out_m', 'Diff', 'Thick_Var', 'Area_m2']].copy()
+            disp.columns = ['Order ID', 'Mothers', 'Input (m)', 'Output (m)', 'Diff (m)', 'Thick Var', 'Diff Area (m²)']
             
-            sum_disp.columns = ['Order ID', 'Mothers', 'Input (m)', 'Output (m)', 'Diff (m)', 'Thick Var', 'Diff Area (m²)']
-            sum_disp['Mothers'] = sum_disp['Mothers'].astype(int)
-            sum_disp['Input (m)'] = sum_disp['Input (m)'].round(0).astype(int)
-            sum_disp['Output (m)'] = sum_disp['Output (m)'].round(0).astype(int)
-            sum_disp.insert(0, 'No.', range(1, len(sum_disp) + 1))
+            disp['Mothers'] = disp['Mothers'].astype(int)
+            disp.insert(0, 'No.', range(1, len(disp) + 1))
             
-            st.table(sum_disp.set_index('No.').style.format({
+            st.table(disp.set_index('No.').style.format({
+                "Input (m)": "{:,.0f}", "Output (m)": "{:,.0f}",
                 "Diff (m)": "{:.2f}", "Thick Var": "{:.3f}", "Diff Area (m²)": "{:.2f}"
             }))
 
             # --- 2. BABY COIL DETAILS ---
             st.divider()
             st.subheader("2. Baby Coil Details")
-            selected_order = st.selectbox("Select Order ID:", options=df[order_col].unique())
-            if selected_order:
-                df_det = df[df[order_col] == selected_order].copy()
-                df_det['Var'] = df_det[ccl_thick] - df_det[cgl_thick]
-                df_det_final = df_det[[mother_col, baby_col, cgl_thick, ccl_thick, 'Var', ccl_len]].copy()
-                df_det_final.columns = ['Mother', 'Baby', 'CGL Thick', 'CCL Thick', 'Var (mm)', 'CCL Len (m)']
-                st.table(df_det_final.style.format({
+            sel_order = st.selectbox("Select Order ID:", options=df[order_c].unique())
+            if sel_order:
+                det = df[df[order_c] == sel_order].copy()
+                det['Var'] = det[ccl_t] - det[cgl_t]
+                det_f = det[[mother_c, baby_c, cgl_t, ccl_t, 'Var', ccl_l]].copy()
+                det_f.columns = ['Mother Coil', 'Baby Coil', 'CGL Thick', 'CCL Thick', 'Var (mm)', 'CCL Len (m)']
+                st.table(det_f.style.format({
                     "CGL Thick": "{:.3f}", "CCL Thick": "{:.3f}", "Var (mm)": "{:.3f}", "CCL Len (m)": "{:.0f}"
                 }))
 
-            # --- 3. VISUAL INSIGHTS ---
+            # --- 3. VISUAL INSIGHTS (CONCLUSIONS IN CHINESE) ---
             st.divider()
-            st.subheader("3. Visual Insights")
-            fig1 = px.bar(sum_disp, x='Order ID', y='Diff Area (m²)', color='Diff (m)', color_continuous_scale='RdBu', title="Extra Area per Order")
-            fig1.update_layout(plot_bgcolor='white')
-            st.plotly_chart(fig1, use_container_width=True)
+            st.subheader("3. Visual Insights & Analysis")
+            
+            # Chart 1
+            f1 = px.bar(disp, x='Order ID', y='Diff Area (m²)', color='Diff (m)', 
+                        color_continuous_scale='RdBu', title="Extra Area per Order")
+            st.plotly_chart(f1, use_container_width=True)
+            st.info("**分析結論:** 正值代表鋼帶延展（Elongation），將導致油漆消耗量增加；負值代表長度短缺，可能源於未記錄的廢料（Scrap）或感測器誤差。")
 
-            fig2 = px.histogram(sum_disp, x='Diff (m)', nbins=15, title="Variance Distribution")
-            fig2.update_layout(plot_bgcolor='white')
-            st.plotly_chart(fig2, use_container_width=True)
+            # Chart 2
+            f2 = px.histogram(disp, x='Diff (m)', nbins=15, title="Production Variance Distribution")
+            st.plotly_chart(f2, use_container_width=True)
+            st.warning("**分析結論:** 數據集中區域代表生產常態損耗（如切邊）；離群值代表異常批次，應立即核查機台張力設定或生產記錄流程。")
 
-            # --- 4. EXECUTIVE SUMMARY ---
+            # --- 4. EXECUTIVE SUMMARY (CHINESE) ---
             st.divider()
             st.subheader("4. Executive Summary")
-            total_in, total_out = sum_disp['Input (m)'].sum(), sum_disp['Output (m)'].sum()
-            short_area = abs(sum_disp[sum_disp['Diff (m)'] < 0]['Diff Area (m²)'].sum())
+            t_in, t_out = disp['Input (m)'].sum(), disp['Output (m)'].sum()
+            area_s = abs(disp[disp['Diff (m)'] < 0]['Diff Area (m²)'].sum())
             st.markdown(f"""
-            * **Total Input:** {total_in:,.0f} m
-            * **Total Output:** {total_out:,.0f} m
-            * **Area Shortfall:** {short_area:,.2f} m²
+            **生產產出綜合分析:**
+            * **總投入 (Total Input):** {t_in:,.0f} m
+            * **總產出 (Total Output):** {t_out:,.0f} m
+            * **不明面積差異 (Area Shortfall):** {area_s:,.2f} m² (此部分需進 một 步調查廢料記錄是否準確)
             """)
 
-            # --- 5. DATA EXPORT ---
+            # --- 5. EXPORT ---
             st.subheader("5. Export Data")
             c1, c2 = st.columns(2)
             with c1:
-                excel_bio = io.BytesIO()
-                with pd.ExcelWriter(excel_bio, engine='xlsxwriter') as writer:
-                    sum_disp.to_excel(writer, sheet_name='Summary', index=False)
-                st.download_button("📊 Download Excel", data=excel_bio.getvalue(), file_name="Report.xlsx", type="primary", use_container_width=True)
+                buf = io.BytesIO()
+                with pd.ExcelWriter(buf, engine='xlsxwriter') as writer:
+                    disp.to_excel(writer, sheet_name='Summary', index=False)
+                st.download_button("📊 Download Excel", data=buf.getvalue(), file_name="Report.xlsx", type="primary", use_container_width=True)
             with c2:
                 components.html("""
                     <script>function printPage() { window.parent.print(); }</script>
@@ -177,4 +181,4 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
         except Exception as e:
             st.error(f"Logic Error: {e}")
 else:
-    st.info("Please insert Google Sheet Link in the source code (GSHEET_URL).")
+    st.info("Please insert the Google Sheet Link in the source code (GSHEET_URL).")
