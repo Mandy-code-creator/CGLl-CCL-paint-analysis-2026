@@ -102,20 +102,47 @@ if 'saved_data' in st.session_state:
             st.table(df_detail_final)
 
         # =============================
-        # 4. VISUAL ANALYSIS
+        # =============================
+        # 4. VISUAL ANALYSIS (WITH AUTOMATED INSIGHTS)
         # =============================
         st.divider()
-        st.subheader("3. Visual Analysis")
+        st.subheader("3. 視覺化分析與結論 (Visual Analysis & Insights)")
         
+        # --- Chart 1: Bar Chart ---
+        st.markdown("#### 3.1 各訂單額外塗漆面積 (Extra Painted Area per Order)")
         fig1 = px.bar(df_summary_disp, x='Order', y='Extra Area (m2)', color='Delta (m)', text='Extra Area (m2)', title="Extra Painted Area per Order")
         st.plotly_chart(fig1, use_container_width=True)
+        st.info("""
+        **📊 圖表意義 (Chart Insight):**
+        * 此圖表顯示每個訂單因長度差異而產生的「額外塗漆面積」(Extra Area)。
+        * **柱狀圖朝下 (Negative Values):** 代表產出長度小於投入長度（短缺），這可能是未記錄的廢料 (Scrap) 或感測器誤差。
+        * **柱狀圖朝上 (Positive Values):** 代表鋼帶被拉伸（延展），導致油漆消耗量增加。
+        * **結論 (Conclusion):** 管理層應優先調查具有最深藍色/最長柱體的訂單，以找出材料流失的根本原因。
+        """)
 
-        fig2 = px.histogram(df_summary_disp, x='Delta (m)', nbins=20, title="Distribution of Elongation")
+        # --- Chart 2: Histogram ---
+        st.markdown("#### 3.2 長度差異分佈圖 (Distribution of Length Variance)")
+        fig2 = px.histogram(df_summary_disp, x='Delta (m)', nbins=20, title="Distribution of Elongation (CCL - CGL)")
         st.plotly_chart(fig2, use_container_width=True)
+        st.warning("""
+        **📊 圖表意義 (Chart Insight):**
+        * 此分佈圖顯示工廠整體的長度差異趨勢。
+        * **集中區域 (The Main Cluster):** 高聳的柱體群代表工廠的「常態短缺/延展」範圍（例如正常的切邊廢料）。
+        * **離群值 (Outliers):** 遠離主群體的矮柱（無論是在極左還是極右）代表異常的生產批次。
+        * **結論 (Conclusion):** 若發現有訂單落在常態分佈之外（例如短缺超過 -1500m），QC 與生產單位必須立即介入，檢查機台張力設定或廢料記錄流程。
+        """)
 
-        fig3 = px.scatter(df_summary, x='Thick_Var_mm', y='Delta_m', color='Extra_Area_m2', hover_data=[order_col], title="Thickness vs Length Delta")
+        # --- Chart 3: Scatter Plot ---
+        st.markdown("#### 3.3 厚度差異 vs. 長度差異 (Thickness vs Length Variance)")
+        fig3 = px.scatter(df_summary, x='Thick_Var_mm', y='Delta_m', color='Extra_Area_m2', hover_data=[order_col], title="Thickness Variance vs Length Delta")
         st.plotly_chart(fig3, use_container_width=True)
-
+        st.success("""
+        **📊 圖表意義 (Chart Insight):**
+        * 探索「厚度變化」是否為導致「長度變化」的原因。
+        * **X軸 (Thick_Var_mm):** 鍍鋅(CGL)與彩塗(CCL)之間的厚度差。
+        * **Y軸 (Delta_m):** 最終的長度差異。
+        * **結論 (Conclusion):** 如果數據點呈現明顯的左上至右下趨勢（或相反），則證實厚度變薄會導致鋼捲被拉長。若無明顯趨勢，則長度異常可能純粹來自設備測量誤差。
+        """)
         # =============================
      # =============================
         # 5. CONCLUSION (OBJECTIVE YIELD INSIGHTS)
