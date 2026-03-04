@@ -12,9 +12,6 @@ and Color Coating (CCL) baby coils to estimate hidden paint loss.
 
 uploaded_file = st.file_uploader("Upload Master Data File (.xlsx or .csv)", type=['xlsx', 'csv'])
 
-# dev_file_path = "data.xlsx" 
-# uploaded_file = dev_file_path         
-
 if uploaded_file is not None:
     try:
         if isinstance(uploaded_file, str):
@@ -123,4 +120,27 @@ if 'saved_data' in st.session_state:
                     mother_coil_col, baby_coil_col, 
                     cgl_thick, ccl_thick, 'Thickness_Variance', ccl_len
                 ]
-                df_detail_
+                df_detail_display = df_detail[detail_display_cols].sort_values(by=mother_coil_col).copy()
+                
+                # CÁCH ĐỔI TÊN MỚI AN TOÀN TUYỆT ĐỐI (DÙNG DICTIONARY)
+                df_detail_display.rename(columns={
+                    mother_coil_col: 'Mother Coil',
+                    baby_coil_col: 'Baby Coil',
+                    cgl_thick: 'CGL Thickness',
+                    ccl_thick: 'CCL Thickness',
+                    'Thickness_Variance': 'Thickness Variance (mm)',
+                    ccl_len: 'CCL Length (m)'
+                }, inplace=True)
+                
+                st.dataframe(df_detail_display, use_container_width=True)
+                
+            except KeyError as e:
+                st.warning(f"Warning: Could not find column {e}.")
+
+    except KeyError as e:
+        st.error(f"Missing column in your file: {e}")
+    except Exception as e:
+        st.error(f"An unexpected error occurred: {e}")
+
+else:
+    st.info("👆 Please upload your master data file (.xlsx or .csv) to begin.")
