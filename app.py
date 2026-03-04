@@ -141,11 +141,11 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
             f1 = px.bar(disp, x='Order ID', y='Diff Area (m²)', color='Diff (m)', 
                         color_continuous_scale='RdBu', title="Extra Area per Order")
             st.plotly_chart(f1, use_container_width=True)
-            st.info("**分析結論:** 正值代表面積增加，將直接提升油漆單位耗用量；負值代表材料流失，需核查廢料申報。")
+            st.info("**分析結論**: 監控各訂單的塗層面積偏差。偏離中心值的數據代表生產投入與產出不一致，建議優先核對該批次的生產日誌。")
 
             f2 = px.histogram(disp, x='Diff (m)', nbins=15, title="Production Variance Distribution")
             st.plotly_chart(f2, use_container_width=True)
-            st.warning("**分析結論:** 數據離群值代表生產異常，應核查 CCL 機台張力設定是否過大導致過度延展。")
+            st.warning("**分析結論**: 數據分布反映生產穩定性。離群值標示該訂單存在異常長度變化，需確認是物理延展、裁切損耗或是計量誤差。")
 
             # --- 4. EXECUTIVE SUMMARY ---
             st.divider()
