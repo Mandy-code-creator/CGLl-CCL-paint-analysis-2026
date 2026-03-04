@@ -6,22 +6,22 @@ import io
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="Paint Yield Analyzer", layout="wide")
 
-# --- CSS FOR PRINTING (Ensures charts and tables are fully visible) ---
+# --- CSS FOR PRINTING (Fixes the "Hidden Columns" and "Cut Charts" issues) ---
 st.markdown("""
     <style>
     @media print {
         /* Hide UI elements for a clean report */
         .stActionButton, .stSidebar, .stHeader, [data-testid="stFileUploadDropzone"], [data-testid="stHeader"] { display: none !important; }
         
-        /* Force tables to show all columns and fit page width */
+        /* Force container to use full page width */
         .main .block-container { max-width: 100% !important; padding: 0 !important; }
+        
+        /* Make tables print fully without scrollbars */
         table { width: 100% !important; font-size: 10px !important; table-layout: fixed !important; border-collapse: collapse; }
         th, td { word-wrap: break-word !important; border: 1px solid #ccc !important; padding: 4px !important; }
-        
-        /* Expand scrollable containers so they print fully */
         div[data-testid="stTable"], .element-container { overflow: visible !important; height: auto !important; }
         
-        /* Optimize Plotly charts for PDF/Print */
+        /* Ensure Plotly charts resize for the page */
         .js-plotly-plot { max-width: 100% !important; height: auto !important; }
     }
     </style>
@@ -47,7 +47,7 @@ if uploaded_file is not None:
         st.error(f"Error: {e}")
 
 # =============================
-# 2. PROCESSING & DISPLAY
+# 2. PROCESSING & DISPLAY (Strictly Your Logic)
 # =============================
 if 'saved_data' in st.session_state:
     df = st.session_state['saved_data'].copy()
@@ -56,13 +56,12 @@ if 'saved_data' in st.session_state:
     ccl_thick, ccl_width, ccl_len = "實測厚度", "實測寬度", "實測長度"
 
     try:
-        # Step 1: Mother Coil Aggregation
+        # Two-step aggregation logic
         step1 = df.groupby([order_col, mother_col]).agg({
             cgl_thick: 'first', cgl_width: 'first', cgl_len: 'first',
             ccl_thick: 'mean', ccl_width: 'mean', ccl_len: 'sum'
         }).reset_index()
 
-        # Step 2: Order Aggregation
         df_summary = step1.groupby(order_col).agg({
             cgl_thick: 'mean', cgl_width: 'mean', cgl_len: 'sum',
             ccl_thick: 'mean', ccl_width: 'mean', ccl_len: 'sum'
@@ -73,17 +72,16 @@ if 'saved_data' in st.session_state:
         df_summary['Thick_Var'] = df_summary[ccl_thick] - df_summary[cgl_thick]
         df_summary['Extra_Area'] = (df_summary[ccl_width] / 1000) * df_summary['Delta']
 
-        # --- DISPLAY SUMMARY TABLE ---
+        # --- SUMMARY TABLE (st.table for full visibility when printing) ---
         st.subheader("1. Summary Table")
         disp_summary = df_summary.sort_values(by='Extra_Area', ascending=False).copy()
         disp_summary = disp_summary[[order_col, 'CGL_Len', 'CCL_Len', 'Delta', 'Thick_Var', 'Extra_Area']]
-        # English Labels for the table
         disp_summary.columns = ['Order', 'CGL(m)', 'CCL(m)', 'Delta(m)', 'Thick Var', 'Area(m2)']
         
-        # Use st.table for non-scrollable printing
+        # Using st.table to prevent scrollbars in print
         st.table(disp_summary.head(30))
 
-        # --- DRILL DOWN SECTION ---
+        # --- DETAIL DRILL DOWN ---
         st.divider()
         st.subheader("2. Detailed Breakdown")
         selected_order = st.selectbox("Select Order Number:", options=df[order_col].unique())
@@ -102,28 +100,30 @@ if 'saved_data' in st.session_state:
             df_detail_final.columns = ['Mother', 'Baby', 'CGL-T', 'CCL-T', 'Diff', 'Len(m)']
             st.table(df_detail_final)
 
-        # --- VISUAL ANALYSIS (Restoring Your Original Designs) ---
+        # --- VISUAL ANALYSIS (Your Original Chart Designs) ---
         st.divider()
         st.subheader("3. Visual Analysis")
         
-        # Bar Chart
+        # Original Bar Chart
         fig1 = px.bar(disp_summary.head(10), x='Order', y='Area(m2)', color='Delta(m)', text='Area(m2)', title="Extra Painted Area per Order")
         st.plotly_chart(fig1, use_container_width=True)
 
-        # Histogram
+        # Original Histogram
         fig2 = px.histogram(disp_summary, x='Delta(m)', nbins=20, title="Distribution of Elongation (CCL - CGL)")
         st.plotly_chart(fig2, use_container_width=True)
 
-        # Scatter Plot
+        # Original Scatter Plot
         fig3 = px.scatter(df_summary, x='Thick_Var', y='Delta', color='Extra_Area', hover_data=[order_col], title="Correlation: Thickness vs Length")
         st.plotly_chart(fig3, use_container_width=True)
 
         # =============================
-        # 3. EXPORT
+        # 3. EXCEL EXPORT
         # =============================
         excel_data = io.BytesIO()
         with pd.ExcelWriter(excel_data, engine='xlsxwriter') as writer:
             disp_summary.to_excel(writer, sheet_name='Summary', index=False)
+            if df_detail_final is not None:
+                df_detail_final.to_excel(writer, sheet_name='Details', index=False)
         st.sidebar.download_button("📥 Download Excel Report", data=excel_data.getvalue(), file_name="Paint_Yield_Report.xlsx")
 
     except Exception as e:
