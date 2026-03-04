@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import io
+import streamlit.components.v1 as components
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="Paint Yield Analyzer", layout="wide")
@@ -203,7 +204,7 @@ if 'saved_data' in st.session_state:
                 st.success("未檢測到明顯的長度短缺 (No significant length shortage detected).")
 
         # =============================
-        # 6. EXCEL EXPORT (ĐÃ MANG RA MÀN HÌNH CHÍNH)
+        # 6. EXCEL EXPORT 
         # =============================
         excel_data = io.BytesIO()
         with pd.ExcelWriter(excel_data, engine='xlsxwriter') as writer:
@@ -225,22 +226,16 @@ if 'saved_data' in st.session_state:
             data=excel_data.getvalue(), 
             file_name="Paint_Yield_Report.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            type="primary" # Nút sẽ có màu đỏ/xanh nổi bật
+            type="primary"
         )
 
-    except Exception as e:
-        st.error(f"Logic Error: {e}")
-else:
-    st.info("👆 Please upload your data file to start.")
-    # =============================
+        # =============================
         # 7. PDF EXPORT (NÚT IN BÁO CÁO)
         # =============================
         st.divider()
         st.subheader("🖨️ 6. 匯出 PDF (Export to PDF)")
         st.markdown("Bấm nút bên dưới để mở giao diện in báo cáo. Vui lòng chọn **Save as PDF (Lưu dưới dạng PDF)** trong cửa sổ hiện ra.")
         
-        # Dùng JavaScript để kích hoạt lệnh in của trình duyệt
-        import streamlit.components.v1 as components
         components.html(
             """
             <script>
@@ -265,3 +260,8 @@ else:
             """,
             height=60
         )
+
+    except Exception as e:
+        st.error(f"Logic Error: {e}")
+else:
+    st.info("👆 Please upload your data file to start.")
