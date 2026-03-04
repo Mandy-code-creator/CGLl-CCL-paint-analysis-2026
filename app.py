@@ -5,7 +5,7 @@ import io
 import streamlit.components.v1 as components
 
 # --- PAGE CONFIGURATION ---
-st.set_page_config(page_title="Steel Yield Insight", layout="wide")
+st.set_page_config(page_title="Length Variance Analysis: Total CGL vs CCL per Order", layout="wide")
 
 # ==========================================================
 # 1. AUTO-SYNC CONFIGURATION (INSERT YOUR LINK HERE)
@@ -53,7 +53,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.title("Steel Production Yield Analytics")
+st.title("Length Variance Analysis: Total CGL vs CCL per Order")
 
 # --- DATA FETCHING ---
 @st.cache_data(ttl=300)
