@@ -39,7 +39,7 @@ if uploaded_file:
 if 'saved_data' in st.session_state:
     df = st.session_state['saved_data'].copy()
 
-    # Columns mapping
+    # Column mapping
     order_col = "訂單號碼"
     mother_col = "投入鋼捲號碼"
     baby_col = "產出鋼捲號碼"
@@ -49,87 +49,83 @@ if 'saved_data' in st.session_state:
     coating_col = "塗層厚度_mm"  # optional
 
     # ----------------------------
-    # Convert units if necessary (assume input mm)
+    # Convert units (mm → m)
     df[cgl_len_col] = df[cgl_len_col] / 1000
     df[ccl_len_col] = df[ccl_len_col] / 1000
     df[ccl_width_col] = df[ccl_width_col] / 1000
 
     # ----------------------------
-    # Step1: Aggregate per mother coil
-    step1_agg = {
-        ccl_len_col: 'sum',      # sum all baby coils
-        ccl_width_col: 'mean',
-        cgl_len_col: 'first'     # take actual mother coil length, not sum
-    }
-    df_step1 = df.groupby([order_col, mother_col]).agg(step1_agg).reset_index()
+    # Delta Length per baby coil
+    df['Delta_Length'] = df[ccl_len_col] - df[cgl_len_col]
+    df['Extra_Area_m2'] = (df['Delta_Length'] * df[ccl_width_col]).clip(lower=0)
 
-    # Step2: Aggregate per order
-    step2_agg = {
-        ccl_len_col: 'sum',
-        ccl_width_col: 'mean',
-        cgl_len_col: 'sum'  # sum mother coils per order
-    }
-    df_summary = df_step1.groupby(order_col).agg(step2_agg).reset_index()
-    df_summary.rename(columns={cgl_len_col:'CGL_Total_Length', ccl_len_col:'CCL_Total_Length'}, inplace=True)
-
-    # ----------------------------
-    # Delta Length
-    df_summary['Delta_Length'] = df_summary['CCL_Total_Length'] - df_summary['CGL_Total_Length']
-
-    # Extra Area
-    df_summary['Extra_Area_m2'] = (df_summary['Delta_Length'] * df_summary[ccl_width_col]).clip(lower=0)
-
-    # Paint Mass if coating thickness exists
+    # Paint Mass
     rho_paint = 1200  # kg/m3
     if coating_col in df.columns:
-        df_summary['Paint_Volume_m3'] = df_summary['Extra_Area_m2'] * (df[coating_col].mean()/1000)
-        df_summary['Paint_Mass_kg'] = df_summary['Paint_Volume_m3'] * rho_paint
+        df['Paint_Mass_kg'] = df['Extra_Area_m2'] * (df[coating_col].mean()/1000) * rho_paint
     else:
-        df_summary['Paint_Volume_m3'] = None
-        df_summary['Paint_Mass_kg'] = None
+        df['Paint_Mass_kg'] = None
+
+    # Paint Status
+    df['Paint_Status'] = df['Delta_Length'].apply(lambda x: '✅ Saved' if x <= 0 else '⚠️ Needed')
 
     # ----------------------------
-    # ORDER SUMMARY DISPLAY
+    # Order-level summary (sum from baby coils)
+    df_summary = df.groupby(order_col).agg({
+        cgl_len_col:'sum',
+        ccl_len_col:'sum',
+        'Delta_Length':'sum',
+        'Extra_Area_m2':'sum',
+        'Paint_Mass_kg':'sum'
+    }).reset_index()
+    df_summary['Paint_Status'] = df_summary['Delta_Length'].apply(lambda x: '✅ Saved' if x <=0 else '⚠️ Needed')
+    df_summary.rename(columns={
+        cgl_len_col:'CGL_Total_Length',
+        ccl_len_col:'CCL_Total_Length'
+    }, inplace=True)
+
+    # ----------------------------
+    # 1️⃣ Order Summary
     st.subheader("1. Order Summary")
-    display_cols = ['CGL_Total_Length','CCL_Total_Length','Delta_Length','Extra_Area_m2','Paint_Mass_kg']
+    display_cols = ['CGL_Total_Length','CCL_Total_Length','Delta_Length','Extra_Area_m2','Paint_Mass_kg','Paint_Status']
     df_display = df_summary[display_cols].copy()
-    df_display.columns = ['CGL Total Length (m)','CCL Total Length (m)','Delta Length (m)','Extra Area (m2)','Paint (kg)']
+    df_display.columns = ['CGL Total Length (m)','CCL Total Length (m)','Delta Length (m)',
+                          'Extra Area (m2)','Paint (kg)','Paint Status']
     st.dataframe(df_display, use_container_width=True)
     st.divider()
 
     # ----------------------------
-    # BABY COIL DETAILS
+    # 2️⃣ Baby Coil Details
     st.subheader("2. Baby Coil Details")
     orders = df[order_col].dropna().unique().tolist()
     selected_order = st.selectbox("Select Order:", orders)
 
     if selected_order:
         df_detail = df[df[order_col]==selected_order].copy()
-        df_detail['Delta_Length'] = df_detail[ccl_len_col] - df_detail[cgl_len_col]
-        df_detail['Extra_Area_m2'] = (df_detail['Delta_Length'] * df_detail[ccl_width_col]).clip(lower=0)
-        if coating_col in df.columns:
-            df_detail['Paint_Mass_kg'] = df_detail['Extra_Area_m2'] * (df[coating_col].mean()/1000) * rho_paint
-        else:
-            df_detail['Paint_Mass_kg'] = None
-        st.dataframe(df_detail[[mother_col,baby_col,cgl_len_col,ccl_len_col,'Delta_Length','Extra_Area_m2','Paint_Mass_kg']], use_container_width=True)
+        df_detail_display = df_detail[[mother_col,baby_col,cgl_len_col,ccl_len_col,
+                                       'Delta_Length','Extra_Area_m2','Paint_Mass_kg','Paint_Status']]
+        df_detail_display.columns = [mother_col,baby_col,'CGL Length (m)','CCL Length (m)',
+                                     'Delta Length (m)','Extra Area (m2)','Paint (kg)','Paint Status']
+        st.dataframe(df_detail_display, use_container_width=True)
 
     # ----------------------------
-    # VISUALS
+    # 3️⃣ Visual Analysis
     st.subheader("3. Visual Analysis")
-    fig1 = px.bar(df_display, x=df_display.index, y='Extra Area (m2)', text='Extra Area (m2)', title="Extra Painted Area per Order")
+    fig1 = px.bar(df_display, x=df_display.index, y='Extra Area (m2)',
+                  text='Extra Area (m2)', title="Extra Painted Area per Order")
     st.plotly_chart(fig1, use_container_width=True)
 
     fig2 = px.histogram(df_display, x='Delta Length (m)', nbins=20, title="Distribution of Delta Length")
     st.plotly_chart(fig2, use_container_width=True)
 
     # ----------------------------
-    # EXPORT
+    # 4️⃣ Export Reports
     st.subheader("4. Export Reports")
     excel_buffer = io.BytesIO()
     with pd.ExcelWriter(excel_buffer, engine='xlsxwriter') as writer:
         df_display.to_excel(writer, sheet_name='Order Summary', index=False)
         if selected_order:
-            df_detail.to_excel(writer, sheet_name='Baby Coil Details', index=False)
+            df_detail_display.to_excel(writer, sheet_name='Baby Coil Details', index=False)
 
     st.download_button(
         label="📥 Download Excel Report",
