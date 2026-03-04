@@ -10,23 +10,37 @@ This application analyzes the length variance between Galvanizing (CGL) mother c
 and Color Coating (CCL) baby coils to estimate hidden paint loss.
 """)
 
-# 1. Nút tải file
+# ==========================================
+# FILE UPLOAD & DEVELOPMENT MODE
+# ==========================================
+# Trick: If you are tired of re-uploading during coding, comment out the st.file_uploader line 
+# and uncomment the dev_file_path line with your actual file name.
+
 uploaded_file = st.file_uploader("Upload Master Data File (.xlsx or .csv)", type=['xlsx', 'csv'])
 
-# 2. Lưu file vào bộ nhớ tạm
+# dev_file_path = "your_data_file.xlsx" # <-- Uncomment this line and put your file name here
+# uploaded_file = dev_file_path         # <-- Uncomment this line
+
 if uploaded_file is not None:
-    df_temp = pd.read_excel(uploaded_file) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file)
-    st.session_state['saved_data'] = df_temp 
-    st.success("File uploaded and saved to memory!")
+    try:
+        if isinstance(uploaded_file, str):
+            df_temp = pd.read_excel(uploaded_file) if uploaded_file.endswith('.xlsx') else pd.read_csv(uploaded_file)
+        else:
+            df_temp = pd.read_excel(uploaded_file) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file)
+            
+        st.session_state['saved_data'] = df_temp 
+        st.success("Data loaded successfully!")
+    except Exception as e:
+        st.error(f"Error reading file: {e}")
 
 if 'saved_data' in st.session_state:
     df = st.session_state['saved_data'].copy()
     
-    # --- KHAI BÁO CÁC CỘT DỮ LIỆU ---
+    # --- DATA COLUMNS (KEEPING ORIGINAL CHINESE HEADERS FOR PARSING) ---
     order_col = "訂單號碼"
     mother_coil_col = "投入鋼捲號碼"
     
-    # BẠN HÃY SỬA TÊN CỘT NÀY THÀNH TÊN CỘT CHỨA MÃ CUỘN CON TRONG FILE CỦA BẠN
+    # PLEASE UPDATE THIS TO MATCH YOUR BABY COIL COLUMN NAME
     baby_coil_col = "子鋼捲號碼" 
     
     cgl_thick = "镀锌實測厚度"
@@ -39,78 +53,89 @@ if 'saved_data' in st.session_state:
 
     try:
         with st.spinner('Processing and aggregating data...'):
-            # Gom nhóm lần 1 (Theo cuộn mẹ)
+            # Step 1: Group by Mother Coil
             step1_agg = {
                 cgl_thick: 'first', cgl_width: 'first', cgl_len: 'first',
                 ccl_thick: 'mean', ccl_width: 'mean', ccl_len: 'sum'
             }
             df_step1 = df.groupby([order_col, mother_coil_col]).agg(step1_agg).reset_index()
 
-            # Gom nhóm lần 2 (Theo Đơn hàng)
+            # Step 2: Group by Order
             step2_agg = {
                 cgl_thick: 'mean', cgl_width: 'mean', cgl_len: 'sum',
                 ccl_thick: 'mean', ccl_width: 'mean', ccl_len: 'sum'
             }
             df_summary = df_step1.groupby(order_col).agg(step2_agg).reset_index()
 
-            # Đổi tên và tính toán chênh lệch
-            df_summary.rename(columns={cgl_len: 'SUM 镀锌測長度', ccl_len: 'SUM 子鋼捲'}, inplace=True)
-            df_summary['Delta Length CGL-CCL'] = df_summary['SUM 子鋼捲'] - df_summary['SUM 镀锌測長度']
+            # Rename and calculate variances
+            df_summary.rename(columns={cgl_len: 'CGL_Total_Length', ccl_len: 'CCL_Total_Length'}, inplace=True)
+            df_summary['Delta_Length'] = df_summary['CCL_Total_Length'] - df_summary['CGL_Total_Length']
             df_summary['Thickness_Variance'] = df_summary[ccl_thick] - df_summary[cgl_thick]
-            df_summary['Extra_Area_m2'] = (df_summary[ccl_width] / 1000) * df_summary['Delta Length CGL-CCL']
+            df_summary['Extra_Area_m2'] = (df_summary[ccl_width] / 1000) * df_summary['Delta_Length']
 
         # ==========================================
-        # PHẦN 1: BẢNG TỔNG HỢP (TỐI GIẢN)
+        # SECTION 1: ORDER SUMMARY (SIMPLIFIED)
         # ==========================================
-        st.subheader("1. Order Summary (Tổng hợp trọng tâm theo Đơn hàng)")
+        st.subheader("1. Order Summary")
         
-        # Chỉ chọn các cột thực sự mang ý nghĩa phân tích hao hụt
         summary_display_cols = [
             order_col, 
-            'SUM 镀锌測長度', 
-            'SUM 子鋼捲', 
-            'Delta Length CGL-CCL', 
+            'CGL_Total_Length', 
+            'CCL_Total_Length', 
+            'Delta_Length', 
             'Thickness_Variance',
             'Extra_Area_m2'
         ]
-        st.dataframe(
-            df_summary[summary_display_cols].sort_values(by='Extra_Area_m2', ascending=False), 
-            use_container_width=True
-        )
+        
+        # Translate headers to English for the UI display
+        df_summary_display = df_summary[summary_display_cols].sort_values(by='Extra_Area_m2', ascending=False).copy()
+        df_summary_display.columns = [
+            'Order Number', 'CGL Total Length (m)', 'CCL Total Length (m)', 
+            'Delta Length (m)', 'Thickness Variance (mm)', 'Extra Area (m2)'
+        ]
+        
+        st.dataframe(df_summary_display, use_container_width=True)
 
         st.divider()
 
         # ==========================================
-        # PHẦN 2: TRA CỨU CHI TIẾT TỪNG CUỘN CON
+        # SECTION 2: BABY COIL DETAILS (SIMPLIFIED)
         # ==========================================
-        st.subheader("2. Baby Coil Details (Tra cứu chi tiết cuộn con)")
-        st.markdown("Select an order to view the specific thickness variance for each baby coil.")
+        st.subheader("2. Baby Coil Details")
+        st.markdown("Select an order to view the thickness variance analysis for individual baby coils.")
         
         order_list = df[order_col].dropna().unique().tolist()
-        selected_order = st.selectbox("Select Order Number (Chọn Đơn hàng):", options=order_list)
+        selected_order = st.selectbox("Select Order Number:", options=order_list)
         
         if selected_order:
             df_detail = df[df[order_col] == selected_order].copy()
-            df_detail['Baby_Thickness_Variance'] = df_detail[ccl_thick] - df_detail[cgl_thick]
+            df_detail['Thickness_Variance'] = df_detail[ccl_thick] - df_detail[cgl_thick]
             
             try:
-                # Bảng chi tiết thì vẫn giữ nguyên các thông số cụ thể để đối chiếu
+                # Select only analysis-relevant columns
                 detail_display_cols = [
                     mother_coil_col, baby_coil_col, 
-                    cgl_thick, ccl_thick, 'Baby_Thickness_Variance',
-                    cgl_width, ccl_width,
-                    ccl_len
+                    cgl_thick, ccl_thick, 'Thickness_Variance', ccl_len
                 ]
-                st.dataframe(df_detail[detail_display_cols].sort_values(by=mother_coil_col), use_container_width=True)
+                df_detail_display = df_detail[detail_display_cols].sort_values(by=mother_coil_col).copy()
+                
+                # Rename columns to clean English for the UI
+                df_detail_display.columns = [
+                    'Mother Coil', 'Baby Coil', 
+                    'CGL Thickness', 'CCL Thickness', 'Thickness Variance', 'CCL Length (m)'
+                ]
+                
+                st.dataframe(df_detail_display, use_container_width=True)
+                
             except KeyError:
-                st.warning("Đang hiển thị toàn bộ cột (Hãy cập nhật biến `baby_coil_col` trong code thành tên cột mã cuộn con của bạn để bảng gọn hơn)")
+                st.warning("Could not find the baby coil column. Please update the `baby_coil_col` variable in the code with the exact column name from your Excel file.")
                 st.dataframe(df_detail)
 
     except KeyError as e:
         st.error(f"Missing column in your file: {e}")
-        st.info("Vui lòng kiểm tra lại tên cột trong file Excel.")
+        st.info("Please ensure the uploaded file contains the correct Chinese column names.")
     except Exception as e:
         st.error(f"An unexpected error occurred: {e}")
 
 else:
-    st.info("👆 Vui lòng tải file Excel/CSV lên để bắt đầu phân tích / Please upload your data file to begin.")
+    st.info("👆 Please upload your master data file (.xlsx or .csv) to begin.")
