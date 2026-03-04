@@ -5,6 +5,30 @@ import io
 
 # --- PAGE CONFIGURATION (Your Design) ---
 st.set_page_config(page_title="Paint Yield Analyzer", layout="wide")
+
+# --- CSS FOR PRINTING (Strictly to prevent data being hidden/cut off) ---
+st.markdown("""
+    <style>
+    @media print {
+        /* Expand the main container to full width */
+        .main .block-container { max-width: 100% !important; padding: 0 !important; }
+        
+        /* Hide interactive UI elements that don't belong in a PDF */
+        .stActionButton, .stSidebar, .stHeader, [data-testid="stFileUploadDropzone"], .stSelectbox { display: none !important; }
+        
+        /* Force tables to show all columns and avoid internal scrollbars */
+        table { width: 100% !important; font-size: 10px !important; table-layout: fixed !important; border-collapse: collapse; }
+        th, td { word-wrap: break-word !important; border: 1px solid #ccc !important; padding: 4px !important; }
+        
+        /* Ensure charts resize to fit the printed page width */
+        .js-plotly-plot { max-width: 100% !important; height: auto !important; }
+        
+        /* Prevent page breaks inside charts or metrics */
+        .element-container { page-break-inside: avoid; }
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
 st.title("Paint Yield Analysis: CGL vs CCL Elongation")
 st.markdown("""
 This application analyzes the length variance between **Galvanizing (CGL)** mother coils 
@@ -72,12 +96,14 @@ if 'saved_data' in st.session_state:
 
         # =============================
         # 3. ORDER SUMMARY (Your Design)
-        # =============================
+        # =============
         st.subheader("1. Order Summary")
         summary_display_cols = [order_col, 'CGL_Total_Length', 'CCL_Total_Length', 'Delta_Length', 'Thickness_Variance', 'Extra_Area_m2']
         df_summary_display = df_summary[summary_display_cols].sort_values(by='Extra_Area_m2', ascending=False).copy()
         df_summary_display.columns = ['Order Number', 'CGL Total Length (m)', 'CCL Total Length (m)', 'Delta Length (m)', 'Thickness Variance (mm)', 'Extra Area (m2)']
-        st.dataframe(df_summary_display, use_container_width=True)
+        
+        # CHANGED: Using st.table for printability (no scrollbars)
+        st.table(df_summary_display.head(50)) 
         st.divider()
 
         # =============================
@@ -103,11 +129,14 @@ if 'saved_data' in st.session_state:
             detail_display_cols = [mother_coil_col, baby_coil_col, cgl_thick, ccl_thick, 'Thickness_Variance', ccl_len]
             df_detail_display = df_detail[detail_display_cols].sort_values(by=mother_coil_col).copy()
             df_detail_display.columns = ['Mother Coil', 'Baby Coil', 'CGL Thickness', 'CCL Thickness', 'Thickness Variance (mm)', 'CCL Length (m)']
-            st.dataframe(df_detail_display, use_container_width=True)
+            
+            # CHANGED: Using st.table for printability (no scrollbars)
+            st.table(df_detail_display)
 
         # =============================
         # 5. VISUAL ANALYSIS (Strictly Your Visuals)
         # =============================
+        st.divider()
         st.subheader("3. Visual Analysis: Length & Extra Area")
         fig1 = px.bar(df_summary_display, x='Order Number', y='Extra Area (m2)', color='Delta Length (m)', text='Extra Area (m2)', title="Extra Painted Area per Order")
         st.plotly_chart(fig1, use_container_width=True)
@@ -121,7 +150,7 @@ if 'saved_data' in st.session_state:
         st.plotly_chart(fig3, use_container_width=True)
 
         # =============================
-        # 6. EXPORT REPORTS (Fixed for Cloud)
+        # 6. EXPORT REPORTS
         # =============================
         st.subheader("6. Export Reports")
         excel_buffer = io.BytesIO()
@@ -136,7 +165,7 @@ if 'saved_data' in st.session_state:
             file_name=f"Paint_Yield_Report_{selected_order if selected_order else 'All'}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
-        st.info("💡 To save the dashboard as PDF, press Ctrl+P (or Cmd+P) and select 'Save as PDF'.")
+        st.info("💡 To save the dashboard as PDF: Press **Ctrl+P**, set Layout to **Landscape**, and choose **Save as PDF**.")
 
     except Exception as e:
         st.error(f"An unexpected error occurred: {e}")
