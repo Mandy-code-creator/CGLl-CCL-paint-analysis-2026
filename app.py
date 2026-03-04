@@ -104,11 +104,9 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
             # --- 1. ORDER SUMMARY ---
             st.subheader("1. Order Summary")
             
-            # Ghi chú thuật ngữ (Technical Term Note)
             st.markdown("""
             > **💡 術語說明 (Technical Note):** > **Diff Area (m²)** = **塗層面積差異** (Coating Area Variance)  
-            > * **正值 (+):** 鋼帶延展 (Elongation)，導致塗漆消耗量增加。  
-            > * **負值 (-):** 長度短缺 (Shortage)，可能源於剪切廢料 (Scrap) 或感測器誤差。
+            > * **正值 (+):** 鋼帶延展 (Elongation) | **負值 (-):** 長度短缺 (Shortage)
             """)
 
             disp = summary[[order_c, 'Qty', 'In_m', 'Out_m', 'Diff', 'Thick_Var', 'Area_m2']].copy()
@@ -116,24 +114,25 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
             disp['Mothers'] = disp['Mothers'].astype(int)
             disp.insert(0, 'No.', range(1, len(disp) + 1))
             
-            # TẠO KHUNG CÓ THANH KÉO (SCROLL BAR)
+            # CSS để khống chế chiều cao tương đương khoảng 20 dòng và tạo thanh cuộn
             st.markdown("""
                 <style>
-                .scrollable-table-container {
-                    max-height: 400px;
+                .scrollable-table {
+                    max-height: 650px; /* Chiều cao này xấp xỉ hiển thị 20 dòng */
                     overflow-y: auto;
                     border: 1px solid #e2e8f0;
                 }
                 thead tr th {
                     position: sticky;
                     top: 0;
-                    z-index: 1;
+                    z-index: 10;
                     background-color: #f8fafc !important;
                 }
                 </style>
                 """, unsafe_allow_html=True)
 
-            st.markdown('<div class="scrollable-table-container">', unsafe_allow_html=True)
+            # Bao bọc bảng trong thẻ div có class scrollable-table
+            st.markdown('<div class="scrollable-table">', unsafe_allow_html=True)
             st.table(disp.set_index('No.').style.format({
                 "Input (m)": "{:,.0f}", "Output (m)": "{:,.0f}",
                 "Diff (m)": "{:.2f}", "Thick Var": "{:.3f}", "Diff Area (m²)": "{:.2f}"
