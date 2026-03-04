@@ -12,7 +12,7 @@ and Color Coating (CCL) baby coils to estimate hidden paint loss.
 
 uploaded_file = st.file_uploader("Upload Master Data File (.xlsx or .csv)", type=['xlsx', 'csv'])
 
-# dev_file_path = "data.xlsx" # <-- Bạn có thể bỏ comment dòng này để test không cần upload lại
+# dev_file_path = "data.xlsx" 
 # uploaded_file = dev_file_path         
 
 if uploaded_file is not None:
@@ -22,8 +22,11 @@ if uploaded_file is not None:
         else:
             df_temp = pd.read_excel(uploaded_file) if uploaded_file.name.endswith('.xlsx') else pd.read_csv(uploaded_file)
             
-        # Xóa sạch khoảng trắng thừa trong tên cột để tránh lỗi không tìm thấy cột
+        # 1. DỌN DẸP KHOẢNG TRẮNG
         df_temp.columns = df_temp.columns.str.replace(r'\s+', '', regex=True)
+        
+        # 2. KHỬ CỘT TRÙNG LẶP (Ngăn chặn lỗi Duplicate column names)
+        df_temp = df_temp.loc[:, ~df_temp.columns.duplicated()]
         
         st.session_state['saved_data'] = df_temp 
         st.success("Data loaded successfully!")
@@ -33,7 +36,7 @@ if uploaded_file is not None:
 if 'saved_data' in st.session_state:
     df = st.session_state['saved_data'].copy()
     
-    # --- TÊN CỘT CHUẨN XÁC ĐÃ ĐƯỢC XÓA KHOẢNG TRẮNG ---
+    # --- TÊN CỘT CHUẨN XÁC ĐÃ ĐƯỢC DỌN DẸP ---
     order_col = "訂單號碼"
     mother_coil_col = "投入鋼捲號碼"
     baby_coil_col = "產出鋼捲號碼" 
@@ -77,7 +80,6 @@ if 'saved_data' in st.session_state:
         
         df_summary_display = df_summary[summary_display_cols].sort_values(by='Extra_Area_m2', ascending=False).copy()
         
-        # CÁCH ĐỔI TÊN MỚI AN TOÀN TUYỆT ĐỐI (DÙNG DICTIONARY)
         df_summary_display.rename(columns={
             order_col: 'Order Number',
             'CGL_Total_Length': 'CGL Total Length (m)',
@@ -117,32 +119,8 @@ if 'saved_data' in st.session_state:
             df_detail['Thickness_Variance'] = df_detail[ccl_thick] - df_detail[cgl_thick]
             
             try:
-                # Nếu bạn lỡ tay thêm cột vào đây (thành 7 cột), code vẫn chạy bình thường!
                 detail_display_cols = [
                     mother_coil_col, baby_coil_col, 
                     cgl_thick, ccl_thick, 'Thickness_Variance', ccl_len
                 ]
-                df_detail_display = df_detail[detail_display_cols].sort_values(by=mother_coil_col).copy()
-                
-                # CÁCH ĐỔI TÊN MỚI AN TOÀN TUYỆT ĐỐI 
-                df_detail_display.rename(columns={
-                    mother_coil_col: 'Mother Coil',
-                    baby_coil_col: 'Baby Coil',
-                    cgl_thick: 'CGL Thickness',
-                    ccl_thick: 'CCL Thickness',
-                    'Thickness_Variance': 'Thickness Variance (mm)',
-                    ccl_len: 'CCL Length (m)'
-                }, inplace=True)
-                
-                st.dataframe(df_detail_display, use_container_width=True)
-                
-            except KeyError as e:
-                st.warning(f"Warning: Could not find column {e}.")
-
-    except KeyError as e:
-        st.error(f"Missing column in your file: {e}")
-    except Exception as e:
-        st.error(f"An unexpected error occurred: {e}")
-
-else:
-    st.info("👆 Please upload your master data file (.xlsx or .csv) to begin.")
+                df_detail_
