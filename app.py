@@ -112,7 +112,7 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
             """)
 
             disp = summary[[order_c, 'Qty', 'In_m', 'Out_m', 'Diff', 'Thick_Var', 'Area_m2']].copy()
-            disp.columns = ['Order ID', 'Mothers', 'Input (m)', 'Output (m)', 'Diff (m)', 'Thick Var', 'Diff Area (m²)']
+            disp.columns = ['Order ID', 'Input Coil Number', 'Input (m)', 'Output (m)', 'Diff (m)', 'Thick Var', 'Diff Area (m²)']
             disp['Mothers'] = disp['Mothers'].astype(int)
             disp.insert(0, 'No.', range(1, len(disp) + 1))
             
