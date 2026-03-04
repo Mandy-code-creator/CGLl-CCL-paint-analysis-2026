@@ -2,9 +2,4 @@ streamlit
 pandas
 plotly
 openpyxl
-fpdf
-kaleido
-pandas
-plotly
-streamlit
-XlsxWriter
+xlsxwriter
