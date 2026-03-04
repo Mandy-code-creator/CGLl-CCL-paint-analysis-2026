@@ -5,28 +5,23 @@ import io
 import streamlit.components.v1 as components
 
 # --- PAGE CONFIGURATION ---
-st.set_page_config(page_title="Paint Yield Analysis - Dimension Variance (*4890)", layout="wide")
+st.set_page_config(page_title="Steel Yield Insight", layout="wide")
 
 # ==========================================================
 # 1. AUTO-SYNC CONFIGURATION (INSERT YOUR LINK HERE)
 # ==========================================================
-GSHEET_URL = "https://docs.google.com/spreadsheets/d/1-kayrLVYwOO66Xxc7Vk7dbTNZ5Aph4MVd9DMTz6RJS0/edit?gid=0#gid=0"
+GSHEET_URL = "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
 
 # --- MINIMALIST DESIGN: UNIFORM GRID LINES ---
 st.markdown("""
     <style>
     .stApp { background-color: #ffffff; }
-    
-    /* Content Card */
     div[data-testid="stVerticalBlock"] > div:has(div.stPlotlyChart), 
     div[data-testid="stVerticalBlock"] > div:has(div.stTable) {
         background-color: #ffffff; padding: 20px; border-radius: 0px;
         margin-bottom: 20px; border: none;
     }
-
     h1, h2, h3 { color: #1e3a8a; font-family: 'Segoe UI', sans-serif; font-weight: 700 !important; }
-
-    /* UNIFORM GRID DESIGN: ALL CELLS HAVE THIN LINES */
     table { 
         width: 100% !important; 
         border-collapse: collapse !important; 
@@ -49,8 +44,6 @@ st.markdown("""
         font-size: 13px !important;
     }
     tr:hover { background-color: #f1f5f9; }
-
-    /* Hide elements during PDF print */
     @media print {
         header, .stSidebar, .stButton, [data-testid="stHeader"], .stDivider, .stTextInput { display: none !important; }
         .main .block-container { max-width: 100% !important; padding: 0.5cm !important; }
@@ -60,7 +53,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.title("Paint Yield Analysis - Dimension Variance (*4890)")
+st.title("Steel Production Yield Analytics")
 
 # --- DATA FETCHING ---
 @st.cache_data(ttl=300)
@@ -77,7 +70,7 @@ def load_auto_data(url):
             return df
         return None
     except Exception as e:
-        st.error(f"Connection Error: Check link permissions. Error: {e}")
+        st.error(f"Connection Error: {e}")
         return None
 
 # =============================
@@ -87,7 +80,6 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
     df = load_auto_data(GSHEET_URL)
     
     if df is not None:
-        # Internal column mapping
         order_c, mother_c, baby_c = "訂單號碼", "投入鋼捲號碼", "產出鋼捲號碼"
         cgl_t, cgl_w, cgl_l = "镀锌實測厚度", "镀锌測寬度", "镀锌測長度"
         ccl_t, ccl_w, ccl_l = "實測厚度", "實測寬度", "實測長度"
@@ -111,9 +103,16 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
 
             # --- 1. ORDER SUMMARY ---
             st.subheader("1. Order Summary")
+            
+            # Ghi chú thuật ngữ (Technical Term Note)
+            st.markdown("""
+            > **💡 術語說明 (Technical Note):** > **Diff Area (m²)** = **塗層面積差異** (Coating Area Variance)  
+            > * **正值 (+):** 鋼帶延展 (Elongation)，導致塗漆消耗量增加。  
+            > * **負值 (-):** 長度短缺 (Shortage)，可能源於剪切廢料 (Scrap) 或感測器誤差。
+            """)
+
             disp = summary[[order_c, 'Qty', 'In_m', 'Out_m', 'Diff', 'Thick_Var', 'Area_m2']].copy()
             disp.columns = ['Order ID', 'Mothers', 'Input (m)', 'Output (m)', 'Diff (m)', 'Thick Var', 'Diff Area (m²)']
-            
             disp['Mothers'] = disp['Mothers'].astype(int)
             disp.insert(0, 'No.', range(1, len(disp) + 1))
             
@@ -139,18 +138,16 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
             st.divider()
             st.subheader("3. Visual Insights & Analysis")
             
-            # Chart 1
             f1 = px.bar(disp, x='Order ID', y='Diff Area (m²)', color='Diff (m)', 
                         color_continuous_scale='RdBu', title="Extra Area per Order")
             st.plotly_chart(f1, use_container_width=True)
-            st.info("**分析結論:** 正值代表鋼帶延展（Elongation），將導致油漆消耗量增加；負值代表長度短缺，可能源於未記錄的廢料（Scrap）或感測器誤差。")
+            st.info("**分析結論:** 正值代表面積增加，將直接提升油漆單位耗用量；負值代表材料流失，需核查廢料申報。")
 
-            # Chart 2
             f2 = px.histogram(disp, x='Diff (m)', nbins=15, title="Production Variance Distribution")
             st.plotly_chart(f2, use_container_width=True)
-            st.warning("**分析結論:** 數據集中區域代表生產常態損耗（如切邊）；離群值代表異常批次，應立即核查機台張力設定或生產記錄流程。")
+            st.warning("**分析結論:** 數據離群值代表生產異常，應核查 CCL 機台張力設定是否過大導致過度延展。")
 
-            # --- 4. EXECUTIVE SUMMARY (CHINESE) ---
+            # --- 4. EXECUTIVE SUMMARY ---
             st.divider()
             st.subheader("4. Executive Summary")
             t_in, t_out = disp['Input (m)'].sum(), disp['Output (m)'].sum()
@@ -159,7 +156,7 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
             **生產產出綜合分析:**
             * **總投入 (Total Input):** {t_in:,.0f} m
             * **總產出 (Total Output):** {t_out:,.0f} m
-            * **不明面積差異 (Area Shortfall):** {area_s:,.2f} m² (此部分需進一步調查廢料記錄是否準確)
+            * **不明面積差異 (Area Shortfall):** {area_s:,.2f} m² (需進一步核實廢料申報準確性)
             """)
 
             # --- 5. EXPORT ---
