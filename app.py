@@ -12,7 +12,7 @@ st.set_page_config(page_title="Steel Yield Insight", layout="wide")
 # ==========================================================
 GSHEET_URL = "https://docs.google.com/spreadsheets/d/1-kayrLVYwOO66Xxc7Vk7dbTNZ5Aph4MVd9DMTz6RJS0/edit?gid=0#gid=0"
 
-# --- MINIMALIST DESIGN & SCROLLABLE TABLE ---
+# --- THIẾT KẾ ĐỒNG NHẤT & KHUNG CUỘN BẢNG ---
 st.markdown("""
     <style>
     .stApp { background-color: #ffffff; }
@@ -40,7 +40,7 @@ st.markdown("""
         padding: 12px 8px !important;
         font-size: 13px !important;
         background-color: #f8fafc !important;
-        z-index: 1;
+        z-index: 10;
     }
     td { 
         text-align: center !important; 
@@ -81,7 +81,7 @@ def load_auto_data(url):
 # =============================
 # 2. CORE LOGIC & FULL DISPLAY
 # =============================
-if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY":
+if GSHEET_URL:
     df = load_auto_data(GSHEET_URL)
     
     if df is not None:
@@ -90,7 +90,7 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
         ccl_t, ccl_w, ccl_l = "實測厚度", "實測寬度", "實測長度"
 
         try:
-            # Aggregate Logic
+            # --- XỬ LÝ DỮ LIỆU ---
             s1 = df.groupby([order_c, mother_c]).agg({
                 cgl_t: 'mean', cgl_w: 'mean', cgl_l: 'first',
                 ccl_t: 'mean', ccl_w: 'mean', ccl_l: 'sum'
@@ -106,19 +106,19 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
             summary['Thick_Var'] = summary[ccl_t] - summary[cgl_t]
             summary['Area_m2'] = (summary[cgl_w] / 1000) * summary['Diff']
 
-            # --- PHẦN 1: ORDER SUMMARY (CÓ KHUNG CUỘN) ---
+            # --- PHẦN 1: ORDER SUMMARY (KHUNG CUỘN) ---
             st.subheader("1. Order Summary")
             st.markdown("> **Technical Note:** Diff Area (m²) = Coating Area Variance (+ Elongation / - Shortage)")
             
             disp = summary[[order_c, 'Qty', 'In_m', 'Out_m', 'Diff', 'Thick_Var', 'Area_m2']].copy()
-            disp.columns = ['Order ID', 'Qty', 'Input (m)', 'Output (m)', 'Diff (m)', 'Thick Var', 'Diff Area (m²)']
+            disp.columns = ['Order ID', 'Qty', 'In (m)', 'Out (m)', 'Diff (m)', 'Thick Var', 'Area (m²)']
             disp['Qty'] = disp['Qty'].astype(int)
             disp.insert(0, 'No.', range(1, len(disp) + 1))
             
             st.markdown('<div class="scrollable-table">', unsafe_allow_html=True)
             st.table(disp.set_index('No.').style.format({
-                "Input (m)": "{:,.0f}", "Output (m)": "{:,.0f}",
-                "Diff (m)": "{:.2f}", "Thick Var": "{:.3f}", "Diff Area (m²)": "{:.2f}"
+                "In (m)": "{:,.0f}", "Out (m)": "{:,.0f}",
+                "Diff (m)": "{:.2f}", "Thick Var": "{:.3f}", "Area (m²)": "{:.2f}"
             }))
             st.markdown('</div>', unsafe_allow_html=True)
 
@@ -140,7 +140,7 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
             st.subheader("3. Visual Insights & Analysis")
             
             # Biểu đồ 1: Bar Chart
-            f1 = px.bar(disp, x='Order ID', y='Diff Area (m²)', color='Diff (m)', 
+            f1 = px.bar(disp, x='Order ID', y='Area (m²)', color='Diff (m)', 
                         color_continuous_scale='RdBu', title="Extra Area per Order")
             st.plotly_chart(f1, use_container_width=True)
 
@@ -148,20 +148,21 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
             f2 = px.histogram(disp, x='Diff (m)', nbins=15, title="Production Variance Distribution")
             st.plotly_chart(f2, use_container_width=True)
 
-            # Biểu đồ 3: Scatter Plot
-            f3 = px.scatter(summary, x='Thick_Var', y='Diff', color='Area_m2', hover_data=[order_c], title="Thickness vs Length Variance")
+            # Biểu đồ 3: Scatter Plot (Dày vs Dài)
+            f3 = px.scatter(summary, x='Thick_Var', y='Diff', color='Area_m2', hover_data=[order_c], 
+                            title="Thickness Variance vs Length Variance")
             st.plotly_chart(f3, use_container_width=True)
 
-            # --- PHẦN 4: EXECUTIVE SUMMARY ---
+            # --- PHẦN 4: EXECUTIVE SUMMARY (TIẾNG TRUNG) ---
             st.divider()
             st.subheader("4. Executive Summary")
-            t_in, t_out = disp['Input (m)'].sum(), disp['Output (m)'].sum()
-            area_s = abs(disp[disp['Diff (m)'] < 0]['Diff Area (m²)'].sum())
+            t_in, t_out = disp['In (m)'].sum(), disp['Out (m)'].sum()
+            area_s = abs(disp[disp['Diff (m)'] < 0]['Area (m²)'].sum())
             st.markdown(f"""
-            **整體生產指標 (Overall Production Metrics):**
-            * **Total Input:** {t_in:,.0f} m
-            * **Total Output:** {t_out:,.0f} m
-            * **Area Shortfall:** {area_s:,.2f} m² (需進一步核實廢料申報準確性)
+            **整體生產指標分析:**
+            * **總投入 (Total Input):** {t_in:,.0f} m
+            * **總產出 (Total Output):** {t_out:,.0f} m
+            * **面積差異 (Area Shortfall):** {area_s:,.2f} m² (此部分需進一步核實廢料申報準確性)
             """)
 
             # --- PHẦN 5: EXPORT ---
@@ -171,7 +172,7 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
                 buf = io.BytesIO()
                 with pd.ExcelWriter(buf, engine='xlsxwriter') as writer:
                     disp.to_excel(writer, sheet_name='Summary', index=False)
-                st.download_button("📊 Download Excel", data=buf.getvalue(), file_name="Report.xlsx", type="primary", use_container_width=True)
+                st.download_button("📊 Download Excel Report", data=buf.getvalue(), file_name="Report.xlsx", type="primary", use_container_width=True)
             with c2:
                 components.html("""
                     <script>function printPage() { window.parent.print(); }</script>
@@ -182,5 +183,3 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
 
         except Exception as e:
             st.error(f"Logic Error: {e}")
-else:
-    st.info("Please insert the Google Sheet Link in the source code.")
