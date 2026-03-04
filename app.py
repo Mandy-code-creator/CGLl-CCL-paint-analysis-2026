@@ -78,7 +78,7 @@ def load_auto_data(url):
 # 2. CORE LOGIC
 # =============================
 if GSHEET_URL and GSHEET_URL != "https://docs.google.com/spreadsheets/d/1-kayrLVYwOO66Xxc7Vk7dbTNZ5Aph4MVd9DMTz6RJS0/edit?gid=0#gid=0":
-    df = load_auto_data(GSHEET_URL)
+    df = load_auto_data("https://docs.google.com/spreadsheets/d/1-kayrLVYwOO66Xxc7Vk7dbTNZ5Aph4MVd9DMTz6RJS0/edit?gid=0#gid=0")
     
     if df is not None:
         order_c, mother_c, baby_c = "訂單號碼", "投入鋼捲號碼", "產出鋼捲號碼"
