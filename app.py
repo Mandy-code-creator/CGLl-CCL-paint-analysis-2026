@@ -22,39 +22,11 @@ div[data-testid="stVerticalBlock"] > div:has(div.stTable) {
     margin-bottom: 20px; border: none;
 }
 h1, h2, h3 { color: #1e3a8a; font-family: 'Segoe UI', sans-serif; font-weight: 700 !important; }
-
-table {
-    width: 100% !important;
-    border-collapse: collapse !important;
-    font-family: 'Segoe UI', sans-serif;
-    color: #334155;
-    border: 1px solid #e2e8f0 !important;
-}
-
-th {
-    border: 1px solid #e2e8f0 !important;
-    color: #1e3a8a !important;
-    text-align: center !important;
-    padding: 12px 8px !important;
-    font-size: 13px !important;
-    background-color: #f8fafc !important;
-}
-
-td {
-    text-align: center !important;
-    padding: 10px 8px !important;
-    border: 1px solid #e2e8f0 !important;
-    font-size: 13px !important;
-}
-
+table { width: 100% !important; border-collapse: collapse !important; font-family: 'Segoe UI', sans-serif; color: #334155; border: 1px solid #e2e8f0 !important; }
+th { border: 1px solid #e2e8f0 !important; color: #1e3a8a !important; text-align: center !important; padding: 12px 8px !important; font-size: 13px !important; background-color: #f8fafc !important; }
+td { text-align: center !important; padding: 10px 8px !important; border: 1px solid #e2e8f0 !important; font-size: 13px !important; }
 tr:hover { background-color: #f1f5f9; }
-
-@media print {
-header, .stSidebar, .stButton, [data-testid="stHeader"], .stDivider, .stTextInput { display: none !important; }
-.main .block-container { max-width: 100% !important; padding: 0.5cm !important; }
-table { border: 1px solid #000 !important; }
-th, td { border: 0.5pt solid #ccc !important; }
-}
+@media print { header, .stSidebar, .stButton, [data-testid="stHeader"], .stDivider, .stTextInput { display: none !important; } .main .block-container { max-width: 100% !important; padding: 0.5cm !important; } table { border: 1px solid #000 !important; } th, td { border: 0.5pt solid #ccc !important; } }
 </style>
 """, unsafe_allow_html=True)
 
@@ -71,20 +43,14 @@ def load_auto_data(url):
             gid = "0"
             if "gid=" in url:
                 gid = url.split("gid=")[1].split("&")[0]
-
             csv_url = f"{base_url}/export?format=csv&gid={gid}"
             df = pd.read_csv(csv_url)
-
             df.columns = df.columns.astype(str).str.strip().str.replace(r'\s+', '', regex=True)
-
             return df
-
         return None
-
     except Exception as e:
         st.error(f"Connection Error: {e}")
         return None
-
 
 # ==========================================================
 # CORE LOGIC
@@ -98,53 +64,57 @@ if GSHEET_URL:
         order_c = "訂單號碼"
         mother_c = "投入鋼捲號碼"
         baby_c = "產出鋼捲號碼"
-
         cgl_t = "镀锌實測厚度"
         cgl_w = "镀锌測寬度"
         cgl_l = "镀锌測長度"
-
         ccl_t = "實測厚度"
         ccl_w = "實測寬度"
         ccl_l = "實測長度"
 
         try:
 
-            # ============================================
-            # 1️⃣ ROOT ID LOGIC
-            # ============================================
-
+            # ================================
+            # 1. ROOT ID
+            # ================================
             df["Root_ID"] = df[mother_c].astype(str).str[:-3]
 
-            # ============================================
-            # 2️⃣ DOUBLE COUNT PREVENTION
-            # ============================================
+            # ================================
+            # 2. NULL / BLANK PROTECTION
+            # ================================
+            df[cgl_l] = pd.to_numeric(df[cgl_l], errors='coerce')
+            df[ccl_l] = pd.to_numeric(df[ccl_l], errors='coerce')
 
-            df = df.sort_values([order_c, "Root_ID"])
+            # ================================
+            # 3. INPUT_m theo logic 4 bước
+            # ================================
+            def calc_input(group):
+                group = group.copy()
+                # Sort theo mother coil
+                mothers = group[mother_c].unique()
+                input_vals = []
+                for mother in mothers:
+                    m_group = group[group[mother_c]==mother].copy()
+                    # Dòng đầu mother lấy CGL
+                    first_cgl = m_group[cgl_l].iloc[0]
+                    if pd.isna(first_cgl):
+                        # Nếu blank → lấy CCL
+                        first_cgl = m_group[ccl_l].iloc[0]
+                    m_group["Input_m"] = 0
+                    m_group.loc[m_group.index[0], "Input_m"] = first_cgl
+                    # Orphan coils: nếu CGL blank & không phải mother gốc → Input = CCL
+                    for idx in m_group.index[1:]:
+                        if pd.isna(m_group.loc[idx, cgl_l]) or m_group.loc[idx, cgl_l]==0:
+                            m_group.loc[idx, "Input_m"] = m_group.loc[idx, ccl_l]
+                        else:
+                            m_group.loc[idx, "Input_m"] = 0
+                    input_vals.append(m_group)
+                return pd.concat(input_vals)
 
-            df["Input_m"] = df[cgl_l]
+            df = df.groupby([order_c, "Root_ID"], group_keys=False).apply(calc_input)
 
-            df["Input_m"] = df.groupby([order_c, "Root_ID"])["Input_m"].transform(
-                lambda x: [x.iloc[0]] + [0]*(len(x)-1)
-            )
-
-            # ============================================
-            # 3️⃣ ORPHAN COIL LOGIC
-            # ============================================
-
-            orphan_mask = df.groupby([order_c, "Root_ID"])[cgl_l].transform("max").isna()
-
-            df.loc[orphan_mask, "Input_m"] = df.loc[orphan_mask, ccl_l]
-
-            # ============================================
-            # 4️⃣ NULL DATA PROTECTION
-            # ============================================
-
-            df["Input_m"] = df["Input_m"].fillna(df[ccl_l])
-
-            # ============================================
-            # AGGREGATION
-            # ============================================
-
+            # ================================
+            # 4. AGGREGATION
+            # ================================
             s1 = df.groupby([order_c, mother_c]).agg({
                 "Input_m": "sum",
                 cgl_t: "mean",
@@ -170,17 +140,13 @@ if GSHEET_URL:
             })
 
             summary["Diff"] = summary["Out_m"] - summary["In_m"]
-
             summary["Thick_Var"] = summary[ccl_t] - summary[cgl_t]
-
             summary["Area_m2"] = (summary[cgl_w] / 1000) * summary["Diff"]
 
-            # =====================================================
+            # ================================
             # 1. ORDER SUMMARY
-            # =====================================================
-
+            # ================================
             st.subheader("1. Order Summary")
-
             st.markdown("""
 > **💡 術語說明 (Technical Note):**  
 > **Diff Area (m²)** = **塗層面積差異** (Coating Area Variance)
@@ -189,17 +155,7 @@ if GSHEET_URL:
 """)
 
             disp = summary[[order_c, "Qty", "In_m", "Out_m", "Diff", "Thick_Var", "Area_m2"]].copy()
-
-            disp.columns = [
-                "Order ID",
-                "Input Coil Number",
-                "Input (m)",
-                "Output (m)",
-                "Diff (m)",
-                "Thick Var",
-                "Diff Area (m²)"
-            ]
-
+            disp.columns = ["Order ID", "Input Coil Number", "Input (m)", "Output (m)", "Diff (m)", "Thick Var", "Diff Area (m²)"]
             disp.insert(0, "No.", range(1, len(disp)+1))
 
             st.table(
@@ -212,39 +168,18 @@ if GSHEET_URL:
                 })
             )
 
-            # =====================================================
+            # ================================
             # 2. PRODUCTION DETAILS
-            # =====================================================
-
+            # ================================
             st.divider()
-
             st.subheader("2. Production Coil Details")
-
             order_list = df[order_c].unique()
-
-            sel_order = st.selectbox(
-                "Select Order ID to view details:",
-                options=order_list
-            )
+            sel_order = st.selectbox("Select Order ID to view details:", options=order_list)
 
             if sel_order:
-
                 det = df[df[order_c] == sel_order].copy()
-
                 det["Var"] = det[ccl_t] - det[cgl_t]
-
-                det_f = det[[
-                    mother_c,
-                    baby_c,
-                    cgl_t,
-                    cgl_w,
-                    cgl_l,
-                    ccl_t,
-                    ccl_w,
-                    "Var",
-                    ccl_l
-                ]].copy()
-
+                det_f = det[[mother_c, baby_c, cgl_t, cgl_w, cgl_l, ccl_t, ccl_w, "Var", ccl_l]].copy()
                 det_f.columns = [
                     "Input Coil ID (CGL)",
                     "Output Coil ID (CCL)",
@@ -256,60 +191,37 @@ if GSHEET_URL:
                     "Thick Deviation (mm)",
                     "Output Length (m)"
                 ]
+                st.table(det_f.style.format({
+                    "Input Thick (mm)": "{:.3f}",
+                    "Input Width (mm)": "{:,.0f}",
+                    "Input Length (m)": "{:,.0f}",
+                    "Output Thick (mm)": "{:.3f}",
+                    "Output Width (mm)": "{:,.0f}",
+                    "Thick Deviation (mm)": "{:.3f}",
+                    "Output Length (m)": "{:,.0f}"
+                }))
 
-                st.table(
-                    det_f.style.format({
-                        "Input Thick (mm)": "{:.3f}",
-                        "Input Width (mm)": "{:,.0f}",
-                        "Input Length (m)": "{:,.0f}",
-                        "Output Thick (mm)": "{:.3f}",
-                        "Output Width (mm)": "{:,.0f}",
-                        "Thick Deviation (mm)": "{:.3f}",
-                        "Output Length (m)": "{:,.0f}"
-                    })
-                )
-
-            # =====================================================
+            # ================================
             # 3. VISUAL INSIGHTS
-            # =====================================================
-
+            # ================================
             st.divider()
             st.subheader("3. Visual Insights & Analysis")
-
-            f1 = px.bar(
-                disp,
-                x="Order ID",
-                y="Diff Area (m²)",
-                color="Diff (m)",
-                color_continuous_scale="RdBu",
-                title="Extra Area per Order"
-            )
-
+            f1 = px.bar(disp, x="Order ID", y="Diff Area (m²)", color="Diff (m)",
+                        color_continuous_scale="RdBu", title="Extra Area per Order")
             st.plotly_chart(f1, use_container_width=True)
-
             st.info("監控各訂單的塗層面積偏差")
 
-            f2 = px.histogram(
-                disp,
-                x="Diff (m)",
-                nbins=15,
-                title="Production Variance Distribution"
-            )
-
+            f2 = px.histogram(disp, x="Diff (m)", nbins=15, title="Production Variance Distribution")
             st.plotly_chart(f2, use_container_width=True)
 
-            # =====================================================
+            # ================================
             # 4. EXECUTIVE SUMMARY
-            # =====================================================
-
+            # ================================
             st.divider()
             st.subheader("4. Executive Summary")
-
             t_in = disp["Input (m)"].sum()
             t_out = disp["Output (m)"].sum()
-
             area_s = abs(disp[disp["Diff (m)"] < 0]["Diff Area (m²)"].sum())
-
             st.markdown(f"""
 **生產產出綜合分析**
 
@@ -318,37 +230,21 @@ if GSHEET_URL:
 * **Area Shortfall:** {area_s:,.2f} m²
 """)
 
-            # =====================================================
+            # ================================
             # 5. EXPORT
-            # =====================================================
-
+            # ================================
             st.subheader("5. Export Data")
-
             c1, c2 = st.columns(2)
-
             with c1:
-
                 buf = io.BytesIO()
-
                 with pd.ExcelWriter(buf, engine="xlsxwriter") as writer:
-
                     disp.to_excel(writer, sheet_name="Summary", index=False)
-
-                st.download_button(
-                    "📊 Download Excel",
-                    data=buf.getvalue(),
-                    file_name="Report.xlsx",
-                    type="primary",
-                    use_container_width=True
-                )
-
+                st.download_button("📊 Download Excel", data=buf.getvalue(), file_name="Report.xlsx", type="primary", use_container_width=True)
             with c2:
-
                 components.html("""
 <script>
 function printPage() { window.parent.print(); }
 </script>
-
 <button onclick="printPage()" style="
 background-color: white;
 color: #1e3a8a;
@@ -364,9 +260,7 @@ Save as PDF Report
 """, height=70)
 
         except Exception as e:
-
             st.error(f"Logic Error: {e}")
 
 else:
-
     st.info("Please insert the Google Sheet Link in the source code (GSHEET_URL).")
