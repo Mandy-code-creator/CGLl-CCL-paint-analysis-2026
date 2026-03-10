@@ -18,6 +18,7 @@ st.markdown("""
     <style>
     .stApp { background-color: #ffffff; }
     div[data-testid="stVerticalBlock"] > div:has(div.stPlotlyChart), 
+    div[data-testid="stVerticalBlock"] > div:has(div.stDataFrame),
     div[data-testid="stVerticalBlock"] > div:has(div.stTable) {
         background-color: #ffffff; padding: 20px; border-radius: 0px;
         margin-bottom: 20px; border: none;
@@ -109,19 +110,19 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
                 
             # --- AUTOMATIC ROUTING ALGORITHM ---
             
-            # BƯỚC 1: LỌC CUỘN CON TRÙNG LẶP ĐỂ BẢO VỆ OUTPUT
+            # STEP 1: PREVENT DOUBLE COUNTING FOR OUTPUT COILS
             df['is_first_baby'] = ~df.duplicated(subset=[order_c, baby_c], keep='first')
             df[ccl_l] = df.apply(lambda r: r[ccl_l] if r['is_first_baby'] else 0, axis=1)
 
-            # BƯỚC 2: TÌM ROOT ID CỦA CUỘN MẸ
+            # STEP 2: EXTRACT ROOT ID
             df['base_coil'] = df[mother_c].astype(str).str[:-3]
             
-            # BƯỚC 3: KIỂM TRA ĐẶC TÍNH CỦA NHÓM PHÔI
+            # STEP 3: CHECK GROUP CHARACTERISTICS
             df['is_x00'] = df[mother_c].astype(str).str.endswith('X00', na=False)
             df['family_has_x00'] = df.groupby([order_c, 'base_coil'])['is_x00'].transform('any')
             df['family_has_cgl'] = df.groupby([order_c, 'base_coil'])[cgl_l].transform(lambda x: (x > 0).any())
             
-            # BƯỚC 4: LỌC CHỐNG CỘNG DỒN CỦA INPUT
+            # STEP 4: PREVENT DOUBLE COUNTING FOR INPUT
             df['is_first_mother'] = ~df.duplicated(subset=[order_c, mother_c])
             df['sum_ccl_by_mother'] = df.groupby([order_c, mother_c])[ccl_l].transform('sum')
 
@@ -129,25 +130,20 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
                 if not row['is_first_mother']: return 0
                 
                 if row[cgl_l] > 0:
-                    # Quy tắc 1: Nếu nhóm có X00, chỉ X00 giữ CGL. Con cái (M00/P00) bị ép về 0
                     if row['family_has_x00'] and not row['is_x00']: return 0
-                    # Quy tắc 2: Nếu không có X00, mọi anh em (A00, B00) đều giữ CGL
                     return row[cgl_l]
                 
                 if row[cgl_l] == 0:
-                    # Quy tắc 3: Nếu anh em khác có CGL, cuộn trống số bị ép về 0
                     if row['family_has_cgl']: return 0
-                    # Mồ côi hoàn toàn: Đắp số CCL qua
                     return row['sum_ccl_by_mother']
                 return 0
             
-            # ÉP SỐ LIỆU ĐÃ LỌC
             df[cgl_l] = df.apply(resolve_input, axis=1)
             df[outer_cut] = df.apply(lambda r: r[outer_cut] if r['is_first_mother'] else 0, axis=1)
             df[inner_cut] = df.apply(lambda r: r[inner_cut] if r['is_first_mother'] else 0, axis=1)
             # ------------------------------------------------------------------
 
-            # Sao chép Thick/Width
+            # Copy Thick/Width
             df[cgl_t] = df.groupby([order_c, 'base_coil'])[cgl_t].transform(lambda x: x.replace(0, pd.NA).ffill().bfill()).fillna(0)
             df[cgl_w] = df.groupby([order_c, 'base_coil'])[cgl_w].transform(lambda x: x.replace(0, pd.NA).ffill().bfill()).fillna(0)
 
@@ -178,7 +174,7 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
             summary['Area_m2'] = (summary[cgl_w] / 1000) * summary['Diff']
 
             # ==========================================================
-            # GIAO DIỆN HIỂN THỊ (NGUYÊN BẢN CỦA BẠN)
+            # GIAO DIỆN HIỂN THỊ
             # ==========================================================
 
             # --- 1. ORDER SUMMARY ---
@@ -194,14 +190,18 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
             disp.columns = ['Order ID', 'Qty (Coils)', 'Input (m)', 'Cut Scrap (m)', 'Output (m)', 'Diff (m)', 'Thick Var', 'Diff Area (m²)']
             
             disp = disp.sort_values(by='Cut Scrap (m)', ascending=False).reset_index(drop=True)
-            
             disp['Qty (Coils)'] = disp['Qty (Coils)'].astype(int)
             disp.insert(0, 'No.', range(1, len(disp) + 1))
             
-            st.table(disp).set_index('No.').style.format({
-                "Input (m)": "{:,.0f}", "Cut Scrap (m)": "{:,.0f}", "Output (m)": "{:,.0f}",
-                "Diff (m)": "{:,.0f}", "Thick Var": "{:.0f}", "Diff Area (m²)": "{:,.0f}"
-            }))
+            # FIXED: Sử dụng st.dataframe để tạo thanh cuộn, Thick Var lấy 3 số thập phân
+            st.dataframe(
+                disp.set_index('No.').style.format({
+                    "Input (m)": "{:,.0f}", "Cut Scrap (m)": "{:,.0f}", "Output (m)": "{:,.0f}",
+                    "Diff (m)": "{:,.0f}", "Thick Var": "{:.3f}", "Diff Area (m²)": "{:,.0f}"
+                }),
+                height=600,
+                use_container_width=True
+            )
 
            # --- 2. PRODUCTION COIL DETAILS ---
             st.divider()
@@ -241,17 +241,22 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
                     'Output Length (m)'
                 ]
                 
-                st.table(det_f.head(20).style.format({
-                    "Input Thick (mm)": "{:.0f}", 
-                    "Input Width (mm)": "{:,.0f}", 
-                    "Input Length (m)": "{:,.0f}",
-                    "Outer Cut (m)": "{:,.0f}",
-                    "Inner Cut (m)": "{:,.0f}",
-                    "Output Thick (mm)": "{:.0f}", 
-                    "Output Width (mm)": "{:,.0f}",
-                    "Thick Deviation (mm)": "{:.0f}", 
-                    "Output Length (m)": "{:,.0f}"
-                }))
+                # FIXED: Sử dụng st.dataframe cho bảng chi tiết để tạo thanh cuộn
+                st.dataframe(
+                    det_f.style.format({
+                        "Input Thick (mm)": "{:.0f}", 
+                        "Input Width (mm)": "{:,.0f}", 
+                        "Input Length (m)": "{:,.0f}",
+                        "Outer Cut (m)": "{:,.0f}",
+                        "Inner Cut (m)": "{:,.0f}",
+                        "Output Thick (mm)": "{:.0f}", 
+                        "Output Width (mm)": "{:,.0f}",
+                        "Thick Deviation (mm)": "{:.0f}", 
+                        "Output Length (m)": "{:,.0f}"
+                    }),
+                    height=600,
+                    use_container_width=True
+                )
                 
             # --- 3. VISUAL INSIGHTS (CONCLUSIONS IN CHINESE) ---
             st.divider()
