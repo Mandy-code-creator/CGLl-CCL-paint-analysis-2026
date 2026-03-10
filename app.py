@@ -6,57 +6,55 @@ import streamlit.components.v1 as components
 import re
 
 # --- PAGE CONFIGURATION ---
-st.set_page_config(page_title="Yield & Variance Analytics", layout="wide")
+st.set_page_config(page_title="Length Variance Analysis: Total CGL vs CCL per Order", layout="wide")
 
 # ==========================================================
 # 1. AUTO-SYNC CONFIGURATION
 # ==========================================================
 GSHEET_URL = "https://docs.google.com/spreadsheets/d/1-kayrLVYwOO66Xxc7Vk7dbTNZ5Aph4MVd9DMTz6RJS0/edit?gid=0#gid=0"
 
-# --- DARK MODE DESIGN: PROFESSIONAL & HIGH CONTRAST ---
+# --- MINIMALIST DESIGN: UNIFORM GRID LINES ---
 st.markdown("""
     <style>
-    .stApp { background-color: #0f172a; }
+    .stApp { background-color: #ffffff; }
     div[data-testid="stVerticalBlock"] > div:has(div.stPlotlyChart), 
     div[data-testid="stVerticalBlock"] > div:has(div.stTable) {
-        background-color: #1e293b; padding: 20px; border-radius: 8px;
+        background-color: #ffffff; padding: 20px; border-radius: 0px;
         margin-bottom: 20px; border: none;
     }
-    h1, h2, h3 { color: #f8fafc; font-family: 'Segoe UI', sans-serif; font-weight: 700 !important; }
+    h1, h2, h3 { color: #1e3a8a; font-family: 'Segoe UI', sans-serif; font-weight: 700 !important; }
     table { 
         width: 100% !important; 
         border-collapse: collapse !important; 
         font-family: 'Segoe UI', sans-serif;
-        color: #e2e8f0;
-        border: 1px solid #334155 !important;
+        color: #334155;
+        border: 1px solid #e2e8f0 !important;
     }
     th { 
-        border: 1px solid #334155 !important; 
-        color: #38bdf8 !important; 
+        border: 1px solid #e2e8f0 !important; 
+        color: #1e3a8a !important; 
         text-align: center !important; 
         padding: 12px 8px !important;
         font-size: 13px !important;
-        background-color: #0f172a !important;
+        background-color: #f8fafc !important;
     }
     td { 
         text-align: center !important; 
         padding: 10px 8px !important; 
-        border: 1px solid #334155 !important; 
+        border: 1px solid #e2e8f0 !important; 
         font-size: 13px !important;
     }
-    tr:hover { background-color: #334155; }
-    .stSelectbox label { color: #f8fafc !important; }
-    .stMarkdown p { color: #cbd5e1 !important; }
+    tr:hover { background-color: #f1f5f9; }
     @media print {
         header, .stSidebar, .stButton, [data-testid="stHeader"], .stDivider, .stTextInput { display: none !important; }
         .main .block-container { max-width: 100% !important; padding: 0.5cm !important; }
-        table { border: 1px solid #000 !important; color: #000 !important; }
+        table { border: 1px solid #000 !important; }
         th, td { border: 0.5pt solid #ccc !important; }
     }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("Yield & Variance Analytics: Galvanized Steel Coils")
+st.title("Length Variance Analysis: Total CGL vs CCL per Order")
 
 # --- DATA FETCHING ---
 @st.cache_data(ttl=300)
@@ -79,11 +77,10 @@ def load_auto_data(url):
 # =============================
 # 2. CORE LOGIC
 # =============================
-if GSHEET_URL:
+if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY":
     df = load_auto_data(GSHEET_URL)
     
     if df is not None:
-        # Smart column filter to prevent mapping errors
         def get_col(default, possible_names):
             for name in possible_names:
                 if name in df.columns: return name
@@ -103,56 +100,59 @@ if GSHEET_URL:
 
         try:
             for col in [outer_cut, inner_cut]:
-                if col not in df.columns:
-                    df[col] = 0
+                if col not in df.columns: df[col] = 0
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
-            # Convert all dimension columns to numeric
             for col in [cgl_t, cgl_w, cgl_l, ccl_t, ccl_w, ccl_l]:
                 if col not in df.columns: df[col] = 0
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
                 
-            # --- AUTOMATIC ROUTING ALGORITHM ---
+            # --- THUẬT TOÁN ĐỊNH TUYẾN CUỘN TỰ ĐỘNG ---
             
-            # Step 1: Prevent double counting for OUTPUT coils FIRST
+            # BƯỚC 1: LỌC CUỘN CON TRÙNG LẶP ĐỂ BẢO VỆ OUTPUT (Giữ dòng đầu tiên)
             df['is_first_baby'] = ~df.duplicated(subset=[order_c, baby_c], keep='first')
             df[ccl_l] = df.apply(lambda r: r[ccl_l] if r['is_first_baby'] else 0, axis=1)
 
-            # Step 2: Extract root ID of mother coil
-            def get_root(s):
-                return re.sub(r'[A-Za-z]\d{2}$', '', str(s))
-            df['base_coil'] = df[mother_c].apply(get_root)
+            # BƯỚC 2: TÌM ROOT ID CỦA CUỘN MẸ
+            df['base_coil'] = df[mother_c].astype(str).str[:-3]
             
-            # Step 3: Check if root group has a main mother coil (X00/A00)
-            df['is_main_coil'] = df[mother_c].astype(str).str.contains(r'X00|A00', case=False, regex=True)
-            df['has_main'] = df.groupby([order_c, 'base_coil'])['is_main_coil'].transform('any')
+            # BƯỚC 3: KIỂM TRA ĐẶC TÍNH CỦA NHÓM PHÔI (X00 Tồn tại hay không?)
+            df['is_x00'] = df[mother_c].astype(str).str.endswith('X00', na=False)
+            df['family_has_x00'] = df.groupby([order_c, 'base_coil'])['is_x00'].transform('any')
             
-            # Step 4: Prevent double counting for INPUT & SCRAP
+            # BƯỚC 4: LỌC CHỐNG CỘNG DỒN CỦA INPUT
             df['is_first_mother'] = ~df.duplicated(subset=[order_c, mother_c])
             df['sum_ccl_by_mother'] = df.groupby([order_c, mother_c])[ccl_l].transform('sum')
 
             def resolve_input(row):
                 if not row['is_first_mother']: return 0
                 
-                if row[cgl_l] > 0:
-                    if not row['is_main_coil'] and row['has_main']: return 0
-                    return row[cgl_l]
-                
-                if row[cgl_l] == 0 and not row['has_main']:
-                    return row['sum_ccl_by_mother']
-                return 0
+                if row['family_has_x00']:
+                    # Nhánh 1: Nếu nhóm có X00, X00 gánh team. Mọi cuộn khác bằng 0.
+                    if row['is_x00']:
+                        return row[cgl_l] if row[cgl_l] > 0 else row['sum_ccl_by_mother']
+                    return 0
+                else:
+                    # Nhánh 2: Không có X00 (Ví dụ nhóm A00, B00, AP0). Các cuộn mẹ độc lập.
+                    # Nếu có số mạ kẽm -> Lấy số mạ kẽm. Nếu trống -> Đắp CCL qua.
+                    return row[cgl_l] if row[cgl_l] > 0 else row['sum_ccl_by_mother']
             
-            # Replace original data with filtered data
+            def resolve_scrap(row, col):
+                # Đồng bộ Scrap: Nếu Input bị ép về 0 do luật X00, Scrap cũng phải bằng 0
+                if not row['is_first_mother']: return 0
+                if row['family_has_x00'] and not row['is_x00']: return 0
+                return row[col]
+            
+            # ÉP SỐ LIỆU ĐÃ LỌC LÊN DỮ LIỆU GỐC
             df[cgl_l] = df.apply(resolve_input, axis=1)
-            df[outer_cut] = df.apply(lambda r: r[outer_cut] if r['is_first_mother'] else 0, axis=1)
-            df[inner_cut] = df.apply(lambda r: r[inner_cut] if r['is_first_mother'] else 0, axis=1)
+            df[outer_cut] = df.apply(lambda r: resolve_scrap(r, outer_cut), axis=1)
+            df[inner_cut] = df.apply(lambda r: resolve_scrap(r, inner_cut), axis=1)
             # ------------------------------------------------------------------
 
-            # Copy Thickness & Width from root coils
+            # Sao chép Thick/Width
             df[cgl_t] = df.groupby([order_c, 'base_coil'])[cgl_t].transform(lambda x: x.replace(0, pd.NA).ffill().bfill()).fillna(0)
             df[cgl_w] = df.groupby([order_c, 'base_coil'])[cgl_w].transform(lambda x: x.replace(0, pd.NA).ffill().bfill()).fillna(0)
 
-            # Handle missing data for Output
             df[ccl_t] = df[ccl_t].fillna(0)
             df[ccl_w] = df[ccl_w].fillna(0)
             df[ccl_l] = df[ccl_l].fillna(0)
@@ -180,7 +180,7 @@ if GSHEET_URL:
             summary['Area_m2'] = (summary[cgl_w] / 1000) * summary['Diff']
 
             # ==========================================================
-            # UI: SCROLLABLE DATA TABLES & VISUALS
+            # GIAO DIỆN HIỂN THỊ
             # ==========================================================
 
             # --- 1. ORDER SUMMARY ---
@@ -196,19 +196,18 @@ if GSHEET_URL:
             disp.columns = ['Order ID', 'Qty (Coils)', 'Input (m)', 'Cut Scrap (m)', 'Output (m)', 'Diff (m)', 'Thick Var', 'Diff Area (m²)']
             
             disp = disp.sort_values(by='Cut Scrap (m)', ascending=False).reset_index(drop=True)
+            
             disp['Qty (Coils)'] = disp['Qty (Coils)'].astype(int)
             disp.insert(0, 'No.', range(1, len(disp) + 1))
             
-            # Wrap table in a scrollable container (displays ~20 items perfectly at a glance)
-            with st.container(height=800):
-                st.table(disp.set_index('No.').style.format({
-                    "Input (m)": "{:,.0f}", "Cut Scrap (m)": "{:,.0f}", "Output (m)": "{:,.0f}",
-                    "Diff (m)": "{:,.0f}", "Thick Var": "{:.0f}", "Diff Area (m²)": "{:,.0f}"
-                }))
+            st.table(disp.head(20).set_index('No.').style.format({
+                "Input (m)": "{:,.0f}", "Cut Scrap (m)": "{:,.0f}", "Output (m)": "{:,.0f}",
+                "Diff (m)": "{:,.0f}", "Thick Var": "{:.3f}", "Diff Area (m²)": "{:,.0f}"
+            }))
 
-           # --- 2. DATA INSPECTION ---
+           # --- 2. PRODUCTION COIL DETAILS ---
             st.divider()
-            st.subheader("2. Data Inspection") 
+            st.subheader("2. Production Coil Details") 
             
             order_list = df[order_c].unique()
             
@@ -244,38 +243,35 @@ if GSHEET_URL:
                     'Output Length (m)'
                 ]
                 
-                # Scrollable container for inspection data
-                with st.container(height=800):
-                    st.table(det_f.style.format({
-                        "Input Thick (mm)": "{:.0f}", 
-                        "Input Width (mm)": "{:.0f}", 
-                        "Input Length (m)": "{:.0f}",
-                        "Outer Cut (m)": "{:.0f}",
-                        "Inner Cut (m)": "{:.0f}",
-                        "Output Thick (mm)": "{:.0f}", 
-                        "Output Width (mm)": "{:.0f}",
-                        "Thick Deviation (mm)": "{:.0f}", 
-                        "Output Length (m)": "{:.0f}"
-                    }))
+                st.table(det_f.head(20).style.format({
+                    "Input Thick (mm)": "{:.0f}", 
+                    "Input Width (mm)": "{:,.0f}", 
+                    "Input Length (m)": "{:,.0f}",
+                    "Outer Cut (m)": "{:,.0f}",
+                    "Inner Cut (m)": "{:,.0f}",
+                    "Output Thick (mm)": "{:.0f}", 
+                    "Output Width (mm)": "{:,.0f}",
+                    "Thick Deviation (mm)": "{:.0f}", 
+                    "Output Length (m)": "{:,.0f}"
+                }))
                 
-            # --- 3. VISUAL INSIGHTS & ANALYSIS ---
+            # --- 3. VISUAL INSIGHTS (CONCLUSIONS IN CHINESE) ---
             st.divider()
             st.subheader("3. Visual Insights & Analysis")
             
             f1 = px.bar(disp, x='Order ID', y='Diff Area (m²)', color='Diff (m)', 
-                        color_continuous_scale='Inferno', title="Extra Area per Order", template="plotly_dark")
+                        color_continuous_scale='Blues_r', title="Extra Area per Order")
             st.plotly_chart(f1, use_container_width=True)
             st.info("**分析結論:** 監控各訂單的塗層面積偏差。偏離中心值的數據代表生產投入與產出不一致，建議優先核對該批次的生產日誌。")
 
-            f2 = px.histogram(disp, x='Diff (m)', nbins=15, title="Production Variance Distribution", template="plotly_dark")
-            f2.update_traces(marker_color='#38bdf8')
+            f2 = px.histogram(disp, x='Diff (m)', nbins=15, title="Production Variance Distribution")
             st.plotly_chart(f2, use_container_width=True)
             st.warning("**分析結論:** 數據分布反映生產穩定性。離群值標示該訂單存在異常長度變化，需確認是物理延展、裁切損耗或是計量誤差。")
 
             disp_chart = disp.sort_values(by='Cut Scrap (m)', ascending=False)
             f3 = px.bar(disp_chart, x='Order ID', y='Cut Scrap (m)', 
                         title="Total Cut Scrap per Order (Outer + Inner)",
-                        color='Cut Scrap (m)', color_continuous_scale='Magma', template="plotly_dark")
+                        color='Cut Scrap (m)', color_continuous_scale='Reds_r')
             f3.update_layout(yaxis_title="Scrap Length (m)")
             st.plotly_chart(f3, use_container_width=True)
             st.error("**分析結論:** 各訂單的剪切廢料總量。監控此數據有助於評估來料質量與生產初期的裁切損耗。若數值異常偏高，需檢查鋼捲頭尾品質狀況。")
@@ -303,10 +299,12 @@ if GSHEET_URL:
             with c2:
                 components.html("""
                     <script>function printPage() { window.parent.print(); }</script>
-                    <button onclick="printPage()" style="background-color: transparent; color: #38bdf8; border: 1.5px solid #38bdf8; 
+                    <button onclick="printPage()" style="background-color: white; color: #1e3a8a; border: 1.5px solid #1e3a8a; 
                     border-radius: 4px; padding: 10px; font-size: 14px; cursor: pointer; width: 100%; font-weight: 600;"> 
                     Save as PDF Report </button>
                 """, height=70)
 
         except Exception as e:
             st.error(f"Logic Error: {e}")
+else:
+    st.info("Please insert the Google Sheet Link in the source code (GSHEET_URL).")
