@@ -64,7 +64,7 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
             return default
 
         order_c = get_col("訂單號碼", ["訂單號碼", "订单号码"])
-        mother_c = get_col("投入鋼捲號碼", ["投入鋼捲號碼", "投入钢_号码"])
+        mother_c = get_col("投入鋼捲號碼", ["投入鋼捲號碼", "投入钢卷号码"])
         baby_c = get_col("產出鋼捲號碼", ["產出鋼捲號碼", "产出钢卷号码"])
         cgl_l = get_col("镀锌測長度", ["镀锌測長度", "镀锌實測長度", "镀锌长度", "鍍鋅測長度"])
         ccl_l = get_col("實測長度", ["實測長度", "实测长度"])
@@ -88,7 +88,7 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
                 if col not in df.columns: df[col] = 0
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
-            # --- DEDUPLICATION & ROUTING LOGIC ---
+            # --- ROUTING LOGIC ---
             df['is_first_baby'] = ~df.duplicated(subset=[order_c, baby_c], keep='first')
             df[ccl_l] = df.apply(lambda r: r[ccl_l] if r['is_first_baby'] else 0, axis=1)
             df['base_coil'] = df[mother_c].astype(str).str[:-3]
@@ -133,21 +133,18 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
             summary['Thick_Var'] = summary[ccl_t] - summary[cgl_t]
             summary['Area_m2'] = (summary[cgl_w] / 1000) * summary['Diff']
 
-            # --- 1. ORDER SUMMARY ---
+            # --- UI: ORDER SUMMARY ---
             st.subheader("1. Order Summary")
             disp = summary[[order_c, 'Qty (Coils)', cgl_w, 'In_m', 'Total_Cut', 'Out_m', 'Diff', 'Thick_Var', 'Area_m2']].copy()
             disp.columns = ['Order ID', 'Qty (Coils)', 'Input Width (mm)', 'Input (m)', 'Cut Scrap (m)', 'Output (m)', 'Diff (m)', 'Thick Var', 'Diff Area (m²)']
             disp = disp.sort_values(by='Cut Scrap (m)', ascending=False).reset_index(drop=True)
             disp.insert(0, 'No.', range(1, len(disp) + 1))
-            
-            st.dataframe(
-                disp.set_index('No.').style.format({
-                    "Input Width (mm)": "{:,.0f}", "Input (m)": "{:,.0f}", "Cut Scrap (m)": "{:,.0f}", 
-                    "Output (m)": "{:,.0f}", "Diff (m)": "{:,.0f}", "Thick Var": "{:.3f}", "Diff Area (m²)": "{:,.0f}"
-                }), height=600, use_container_width=True
-            )
+            st.dataframe(disp.set_index('No.').style.format({
+                "Input Width (mm)": "{:,.0f}", "Input (m)": "{:,.0f}", "Cut Scrap (m)": "{:,.0f}", 
+                "Output (m)": "{:,.0f}", "Diff (m)": "{:,.0f}", "Thick Var": "{:.3f}", "Diff Area (m²)": "{:,.0f}"
+            }), height=600, use_container_width=True)
 
-           # --- 2. PRODUCTION COIL DETAILS ---
+           # --- UI: PRODUCTION COIL DETAILS ---
             st.divider()
             st.subheader("2. Production Coil Details") 
             sel_order = st.selectbox("🔍 Select Order ID:", options=df[order_c].unique(), index=None)
@@ -156,33 +153,30 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
                 det['Var'] = det[ccl_t] - det[cgl_t]
                 det_f = det[[mother_c, baby_c, line_c, out_grade_c, next_proc_c, cgl_t, cgl_w, cgl_l, outer_cut, inner_cut, ccl_t, ccl_w, 'Var', ccl_l]].copy()
                 det_f.columns = ['Input ID', 'Output ID', 'Line', 'Grade', 'Next Proc', 'In Thick', 'In Width', 'In Len', 'Outer Cut', 'Inner Cut', 'Out Thick', 'Out Width', 'Thick Dev', 'Out Len']
-                st.dataframe(
-                    det_f.style.format({
-                        "In Thick": "{:.3f}", "In Width": "{:,.0f}", "In Len": "{:,.0f}",
-                        "Outer Cut": "{:,.0f}", "Inner Cut": "{:,.0f}", "Out Thick": "{:.3f}", 
-                        "Out Width": "{:,.0f}", "Thick Dev": "{:.3f}", "Out Len": "{:,.0f}"
-                    }), height=600, use_container_width=True
-                )
+                st.dataframe(det_f.style.format({
+                    "In Thick": "{:.3f}", "In Width": "{:,.0f}", "In Len": "{:,.0f}",
+                    "Outer Cut": "{:,.0f}", "Inner Cut": "{:,.0f}", "Out Thick": "{:.3f}", 
+                    "Out Width": "{:,.0f}", "Thick Dev": "{:.3f}", "Out Len": "{:,.0f}"
+                }), height=600, use_container_width=True)
                 
-            # --- 3. VISUAL INSIGHTS ---
+            # --- UI: VISUAL INSIGHTS ---
             st.divider()
             st.subheader("3. Visual Insights & Analysis")
             st.plotly_chart(px.bar(disp, x='Order ID', y='Diff Area (m²)', color='Diff (m)', color_continuous_scale='Blues_r', title="Extra Area per Order"), use_container_width=True)
-            
-            # THE RESTORED CUT SCRAP CHART
-            f_scrap = px.bar(disp.sort_values(by='Cut Scrap (m)', ascending=False), 
-                           x='Order ID', y='Cut Scrap (m)', 
-                           title="Total Cut Scrap per Order (Outer + Inner)",
-                           color='Cut Scrap (m)', color_continuous_scale='Reds')
-            st.plotly_chart(f_scrap, use_container_width=True)
+            st.info("**分析結論:** 監控各訂單的塗層面積偏差。偏離中心值的數據代表生產投入與產出不一致，建議優先核對該批次的生產日誌。")
 
-            # --- 4. EXECUTIVE SUMMARY ---
+            st.plotly_chart(px.bar(disp.sort_values(by='Cut Scrap (m)', ascending=False), x='Order ID', y='Cut Scrap (m)', 
+                           title="Total Cut Scrap per Order (Outer + Inner)", color='Cut Scrap (m)', color_continuous_scale='Reds'), use_container_width=True)
+            st.error("**分析結論:** 各訂單的剪切廢料總量。監控此數據有助於評估來料質量與生產初期的裁切損耗。若數值異常偏高，需檢查鋼捲頭尾品質狀況。")
+
+            # --- UI: EXECUTIVE SUMMARY ---
             st.divider()
             st.subheader("4. Executive Summary")
             t_in, t_out = disp['Input (m)'].sum(), disp['Output (m)'].sum()
-            st.markdown(f"* **Total Input:** {t_in:,.0f} m  \n* **Total Output:** {t_out:,.0f} m")
+            area_s = abs(disp[disp['Diff (m)'] < 0]['Diff Area (m²)'].sum())
+            st.markdown(f"**生產產出綜合分析:** \n* **總投入 (Total Input):** {t_in:,.0f} m  \n* **總產出 (Total Output):** {t_out:,.0f} m  \n* **不明面積差異 (Area Shortfall):** {area_s:,.2f} m² (需進一步核實廢料申報準確性)")
 
-            # --- 5. EXPORT ---
+            # --- UI: EXPORT ---
             st.subheader("5. Export Data")
             buf = io.BytesIO()
             with pd.ExcelWriter(buf, engine='xlsxwriter') as writer:
