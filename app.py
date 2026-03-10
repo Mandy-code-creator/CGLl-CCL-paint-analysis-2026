@@ -23,12 +23,19 @@ html, body, [class*="css"]  {
     padding-bottom:2rem;
 }
 
-/* Card style */
-div[data-testid="stVerticalBlock"] > div:has(div.stDataFrame),
-div[data-testid="stVerticalBlock"] > div:has(div.stPlotlyChart){
+/* Card style ONLY for Charts, completely removed from DataFrames */
+div[data-testid="stVerticalBlock"] > div:has(div.stPlotlyChart) {
     border-radius:12px;
     box-shadow:0 6px 25px rgba(0,0,0,0.08);
     padding:22px;
+}
+
+/* Remove default background/padding from DataFrame containers */
+div[data-testid="stVerticalBlock"] > div:has(div.stDataFrame) {
+    background-color: transparent !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
 }
 
 /* Title */
@@ -120,8 +127,8 @@ st.markdown(f"""
 <style>
 .stApp {{ background-color: {bg_color}; }}
 
-div[data-testid="stVerticalBlock"] > div:has(div.stPlotlyChart), 
-div[data-testid="stVerticalBlock"] > div:has(div.stDataFrame) {{
+/* Apply theme colors ONLY to Charts */
+div[data-testid="stVerticalBlock"] > div:has(div.stPlotlyChart) {{
     background-color: {card_bg};
     padding: 20px;
     border-radius: 8px;
@@ -275,8 +282,9 @@ if GSHEET_URL:
             disp = disp.sort_values(by='Cut Scrap (m)', ascending=False).reset_index(drop=True)
             disp.insert(0, 'No.', range(1, len(disp) + 1))
 
+            # REMOVED height parameter and ADDED .head(20) for compactness
             st.dataframe(
-                disp.set_index('No.').style.format({
+                disp.head(20).set_index('No.').style.format({
                     "Input Width (mm)": "{:,.0f}",
                     "Input (m)": "{:,.0f}", 
                     "Cut Scrap (m)": "{:,.0f}", 
@@ -285,7 +293,6 @@ if GSHEET_URL:
                     "Thick Var": "{:.3f}", 
                     "Diff Area (m²)": "{:,.0f}"
                 }), 
-                height=600, 
                 use_container_width=True
             )
 
@@ -301,8 +308,9 @@ if GSHEET_URL:
                 det_f = det[[mother_c, baby_c, line_c, out_grade_c, next_proc_c, cgl_t, cgl_w, cgl_l, outer_cut, inner_cut, ccl_t, ccl_w, 'Var', ccl_l]].copy()
                 det_f.columns = ['Input ID', 'Output ID', 'Line', 'Grade', 'Next Proc', 'In Thick', 'In Width', 'In Len', 'Outer Cut', 'Inner Cut', 'Out Thick', 'Out Width', 'Thick Dev', 'Out Len']
 
+                # REMOVED height parameter and ADDED .head(20) for compactness
                 st.dataframe(
-                    det_f.style.format({
+                    det_f.head(20).style.format({
                         "In Thick": "{:.3f}", 
                         "In Width": "{:,.0f}", 
                         "In Len": "{:,.0f}",
@@ -313,7 +321,6 @@ if GSHEET_URL:
                         "Thick Dev": "{:.3f}", 
                         "Out Len": "{:,.0f}"
                     }), 
-                    height=600, 
                     use_container_width=True
                 )
 
