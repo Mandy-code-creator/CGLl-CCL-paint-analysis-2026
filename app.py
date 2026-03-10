@@ -90,9 +90,26 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
         try:
             for col in [outer_cut, inner_cut]:
                 if col not in df.columns:
-                    st.warning(f"Cảnh báo: Không tìm thấy cột '{col}' trong dữ liệu. Hãy kiểm tra lại tên cột trên Google Sheet.")
                     df[col] = 0
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+
+            # --- FIX: XỬ LÝ LỖI CUỘN XẺ (P00, M00...) ---
+            # 1. Ép tất cả các cột kích thước về dạng số (những ô trống sẽ tự biến thành NaN)
+            for col in [cgl_t, cgl_w, cgl_l, ccl_t, ccl_w, ccl_l]:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+                
+            # 2. Sao chép độ dày & độ rộng CGL từ cuộn mẹ gốc cho các cuộn bị xẻ (cùng đơn hàng)
+            df[cgl_t] = df.groupby(order_c)[cgl_t].transform(lambda x: x.ffill().bfill()).fillna(0)
+            df[cgl_w] = df.groupby(order_c)[cgl_w].transform(lambda x: x.ffill().bfill()).fillna(0)
+            
+            # 3. Điền chiều dài đầu vào CGL bằng 0 cho các ô trống để tránh nhân đôi dữ liệu gốc
+            df[cgl_l] = df[cgl_l].fillna(0)
+            
+            # 4. Tránh lỗi hiển thị đối với các ô CCL vô tình bị trống
+            df[ccl_t] = df[ccl_t].fillna(0)
+            df[ccl_w] = df[ccl_w].fillna(0)
+            df[ccl_l] = df[ccl_l].fillna(0)
+            # ---------------------------------------------
 
             s1 = df.groupby([order_c, mother_c]).agg({
                 cgl_t: 'mean', cgl_w: 'mean', cgl_l: 'first',
@@ -106,7 +123,7 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
                 ccl_t: 'mean', cgl_t: 'mean', cgl_w: 'mean'
             }).reset_index()
 
-            summary = summary.rename(columns={mother_c: 'Qty', cgl_l: 'In_m', ccl_l: 'Out_m'})
+            summary = summary.rename(columns={mother_c: 'Qty (Coils)', cgl_l: 'In_m', ccl_l: 'Out_m'})
             
             summary['Total_Cut'] = summary[outer_cut] + summary[inner_cut]
             summary['Diff'] = summary['Out_m'] - (summary['In_m'] - summary['Total_Cut'])
@@ -122,13 +139,12 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
             > * **負值 (-):** 長度短缺 (Shortage)，可能源於剪切廢料 (Scrap) 或感測器誤差。
             """)
 
-            disp = summary[[order_c, 'Qty', 'In_m', 'Total_Cut', 'Out_m', 'Diff', 'Thick_Var', 'Area_m2']].copy()
-            disp.columns = ['Order ID', 'Input Coil Number', 'Input (m)', 'Cut Scrap (m)', 'Output (m)', 'Diff (m)', 'Thick Var', 'Diff Area (m²)']
+            disp = summary[[order_c, 'Qty (Coils)', 'In_m', 'Total_Cut', 'Out_m', 'Diff', 'Thick_Var', 'Area_m2']].copy()
+            disp.columns = ['Order ID', 'Qty (Coils)', 'Input (m)', 'Cut Scrap (m)', 'Output (m)', 'Diff (m)', 'Thick Var', 'Diff Area (m²)']
             
-            # --- ĐÃ CẬP NHẬT: Sắp xếp bảng từ lớn đến bé theo Cut Scrap (m) ---
             disp = disp.sort_values(by='Cut Scrap (m)', ascending=False).reset_index(drop=True)
             
-            disp['Input Coil Number'] = disp['Input Coil Number'].astype(int)
+            disp['Qty (Coils)'] = disp['Qty (Coils)'].astype(int)
             disp.insert(0, 'No.', range(1, len(disp) + 1))
             
             st.table(disp.set_index('No.').style.format({
@@ -199,7 +215,6 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
             st.plotly_chart(f2, use_container_width=True)
             st.warning("**分析結論:** 數據分布反映生產穩定性。離群值標示該訂單存在異常長度變化，需確認是物理延展、裁切損耗或是計量誤差。")
 
-            # --- Sắp xếp lại biểu đồ Cut Scrap cho đồng bộ với bảng ---
             disp_chart = disp.sort_values(by='Cut Scrap (m)', ascending=False)
             f3 = px.bar(disp_chart, x='Order ID', y='Cut Scrap (m)', 
                         title="Total Cut Scrap per Order (Outer + Inner)",
