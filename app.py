@@ -125,8 +125,8 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
             disp = summary[[order_c, 'Qty', 'In_m', 'Total_Cut', 'Out_m', 'Diff', 'Thick_Var', 'Area_m2']].copy()
             disp.columns = ['Order ID', 'Input Coil Number', 'Input (m)', 'Cut Scrap (m)', 'Output (m)', 'Diff (m)', 'Thick Var', 'Diff Area (m²)']
             
-            # --- CẢI TIẾN TẠI ĐÂY: Sắp xếp bảng từ lớn đến bé theo Mã đơn hàng (Order ID) ---
-            disp = disp.sort_values(by='Order ID', ascending=False).reset_index(drop=True)
+            # --- ĐÃ CẬP NHẬT: Sắp xếp bảng từ lớn đến bé theo Cut Scrap (m) ---
+            disp = disp.sort_values(by='Cut Scrap (m)', ascending=False).reset_index(drop=True)
             
             disp['Input Coil Number'] = disp['Input Coil Number'].astype(int)
             disp.insert(0, 'No.', range(1, len(disp) + 1))
@@ -199,7 +199,9 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
             st.plotly_chart(f2, use_container_width=True)
             st.warning("**分析結論:** 數據分布反映生產穩定性。離群值標示該訂單存在異常長度變化，需確認是物理延展、裁切損耗或是計量誤差。")
 
-            f3 = px.bar(disp, x='Order ID', y='Cut Scrap (m)', 
+            # --- Sắp xếp lại biểu đồ Cut Scrap cho đồng bộ với bảng ---
+            disp_chart = disp.sort_values(by='Cut Scrap (m)', ascending=False)
+            f3 = px.bar(disp_chart, x='Order ID', y='Cut Scrap (m)', 
                         title="Total Cut Scrap per Order (Outer + Inner)",
                         color='Cut Scrap (m)', color_continuous_scale='Reds')
             f3.update_layout(yaxis_title="Scrap Length (m)")
