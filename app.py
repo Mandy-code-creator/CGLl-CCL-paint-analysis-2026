@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.express as px
 import io
 import streamlit.components.v1 as components
+import re
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="Length Variance Analysis: Total CGL vs CCL per Order", layout="wide")
@@ -12,7 +13,7 @@ st.set_page_config(page_title="Length Variance Analysis: Total CGL vs CCL per Or
 # ==========================================================
 GSHEET_URL = "https://docs.google.com/spreadsheets/d/1-kayrLVYwOO66Xxc7Vk7dbTNZ5Aph4MVd9DMTz6RJS0/edit?gid=0#gid=0"
 
-# --- MINIMALIST DESIGN: UNIFORM GRID LINES ---
+# --- MINIMALIST DESIGN: UNIFORM GRID LINES (GIỮ NGUYÊN BẢN CỦA BẠN) ---
 st.markdown("""
     <style>
     .stApp { background-color: #ffffff; }
@@ -66,7 +67,8 @@ def load_auto_data(url):
                 gid = url.split("gid=")[1].split("&")[0]
             csv_url = f"{base_url}/export?format=csv&gid={gid}"
             df = pd.read_csv(csv_url)
-            df.columns = df.columns.astype(str).str.strip().str.lower().str.replace(r'\s+', '', regex=True)
+            # Khử khoảng trắng để tránh lỗi, không ép lower để giữ đúng format
+            df.columns = df.columns.astype(str).str.strip().str.replace(r'\s+', '', regex=True)
             return df
         return None
     except Exception as e:
@@ -80,76 +82,73 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
     df = load_auto_data(GSHEET_URL)
     
     if df is not None:
-        order_c, mother_c, baby_c = "訂單號碼", "投入鋼捲號碼", "產出鋼捲號碼"
-        cgl_t, cgl_w, cgl_l = "镀锌實測厚度", "镀锌測寬度", "镀锌測長度"
-        ccl_t, ccl_w, ccl_l = "實測厚度", "實測寬度", "實測長度"
+        # BỘ LỌC TÌM CỘT THÔNG MINH (Chống chết App do sai tên cột)
+        def get_col(default, possible_names):
+            for name in possible_names:
+                if name in df.columns: return name
+            return default
 
-        outer_cut = "outercutlength"
-        inner_cut = "innercutlength"
+        order_c = get_col("訂單號碼", ["訂單號碼", "订单号码"])
+        mother_c = get_col("投入鋼捲號碼", ["投入鋼捲號碼", "投入钢卷号码"])
+        baby_c = get_col("產出鋼捲號碼", ["產出鋼捲號碼", "产出钢卷号码"])
+        cgl_l = get_col("镀锌測長度", ["镀锌測長度", "镀锌實測長度", "镀锌长度", "鍍鋅測長度"])
+        ccl_l = get_col("實測長度", ["實測長度", "实测长度"])
+        cgl_w = get_col("镀锌測寬度", ["镀锌測寬度", "镀锌測寬", "镀锌宽度", "鍍鋅測寬度"])
+        cgl_t = get_col("镀锌實測厚度", ["镀锌實測厚度", "镀锌測厚", "镀锌厚度", "鍍鋅實測厚度"])
+        ccl_w = get_col("實測寬度", ["實測寬度", "实测宽度"])
+        ccl_t = get_col("實測厚度", ["實測厚度", "实测厚度"])
+        outer_cut = get_col("outercutlength", ["outercutlength", "outercut"])
+        inner_cut = get_col("innercutlength", ["innercutlength", "innercut"])
 
         try:
-            for col in [outer_cut, inner_cut]:
-                if col not in df.columns:
-                    df[col] = 0
+            # 1. Ép tất cả các cột kích thước về dạng số
+            for col in [outer_cut, inner_cut, cgl_t, cgl_w, cgl_l, ccl_t, ccl_w, ccl_l]:
+                if col not in df.columns: df[col] = 0
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-
-            # Convert dimension columns to numeric
-            for col in [cgl_t, cgl_w, cgl_l, ccl_t, ccl_w, ccl_l]:
-                df[col] = pd.to_numeric(df[col], errors='coerce')
                 
-            # --- AUTOMATIC ROUTING ALGORITHM (2-TIER PRECISION) ---
+            # --- THUẬT TOÁN ĐỊNH TUYẾN CUỘN TỰ ĐỘNG ---
+            # Bước A: Tách lấy gốc của cuộn mẹ bằng Regex chuẩn (VD: '4BC134M00' -> '4BC134')
+            df['base_coil'] = df[mother_c].astype(str).str.replace(r'[A-Za-z]\d{2}$', '', regex=True)
             
-            # Tier 1: Base Family (Remove last 3 chars - ex: 61A983, 4BC133)
-            # Check if this family has any CGL input
-            df['base_family'] = df[mother_c].astype(str).str[:-3]
-            df['has_cgl'] = df[cgl_l] > 0
-            df['family_has_cgl'] = df.groupby([order_c, 'base_family'])['has_cgl'].transform('any')
+            # Bước B: Nhận diện cuộn mẹ gốc (X00/A00)
+            df['is_main_coil'] = df[mother_c].astype(str).str.contains(r'X00|A00', case=False, regex=True)
+            df['has_main'] = df.groupby([order_c, 'base_coil'])['is_main_coil'].transform('any')
             
-            # Tier 2: Mother Group (Remove last 2 chars - ex: 61A983A, 61A983B, 4BC134M)
-            # Separate different mothers (A00 vs B00) but group A00 and AP0 together
-            df['mother_group'] = df[mother_c].astype(str).str[:-2]
-            df['mother_group_has_cgl'] = df.groupby([order_c, 'mother_group'])['has_cgl'].transform('any')
-            df['max_cgl_mother'] = df.groupby([order_c, 'mother_group'])[cgl_l].transform('max')
-            df['sum_ccl_mother'] = df.groupby([order_c, 'mother_group'])[ccl_l].transform('sum')
+            # Bước C: CHỐNG CỘNG DỒN INPUT (Giữ đúng 19,680)
+            df['is_first_mother'] = ~df.duplicated(subset=[order_c, mother_c])
+            df['sum_ccl_by_mother'] = df.groupby([order_c, mother_c])[ccl_l].transform('sum')
+
+            def resolve_input(row):
+                if not row['is_first_mother']: return 0
+                if row[cgl_l] > 0:
+                    if not row['is_main_coil'] and row['has_main']: return 0
+                    return row[cgl_l]
+                if row[cgl_l] == 0 and not row['has_main']:
+                    return row['sum_ccl_by_mother']
+                return 0
+
+            # Bước D: CHỐNG CỘNG DỒN OUTPUT (Giữ dòng đầu nếu lặp 2 lần)
+            df['is_first_baby'] = ~df.duplicated(subset=[order_c, baby_c], keep='first')
             
-            # Mark the first row of each Mother Group to prevent double counting
-            df['is_first_of_mother'] = ~df.duplicated(subset=[order_c, 'mother_group'])
-            
-            def calculate_final_input(row):
-                if not row['is_first_of_mother']:
-                    return 0 # Subsequent rows get 0
-                    
-                if row['mother_group_has_cgl']:
-                    return row['max_cgl_mother'] # Take the length of the mother (e.g., A00)
-                else:
-                    if row['family_has_cgl']:
-                        return 0 # It is a child (e.g., M00) of another mother (e.g., X00) -> 0
-                    else:
-                        return row['sum_ccl_mother'] # True orphan -> Take sum of CCL
-                        
-            df['final_input'] = df.apply(calculate_final_input, axis=1)
-            
-            # Override the CGL column so downstream calculations work seamlessly
-            df[cgl_l] = df['final_input']
+            # ÉP DỮ LIỆU ĐÃ LỌC TRỰC TIẾP VÀO CỘT GỐC (Để tương thích hoàn toàn giao diện của bạn)
+            df[cgl_l] = df.apply(resolve_input, axis=1)
+            df[ccl_l] = df.apply(lambda r: r[ccl_l] if r['is_first_baby'] else 0, axis=1)
+            df[outer_cut] = df.apply(lambda r: r[outer_cut] if r['is_first_mother'] else 0, axis=1)
+            df[inner_cut] = df.apply(lambda r: r[inner_cut] if r['is_first_mother'] else 0, axis=1)
             # ------------------------------------------------------------------
 
-            # 2. Copy Thickness & Width for missing values using CCL data directly
-            df[cgl_t] = df.apply(lambda r: r[ccl_t] if pd.isna(r[cgl_t]) or r[cgl_t] == 0 else r[cgl_t], axis=1)
-            df[cgl_w] = df.apply(lambda r: r[ccl_w] if pd.isna(r[cgl_w]) or r[cgl_w] == 0 else r[cgl_w], axis=1)
+            # 2. Sao chép Độ dày (Thick) & Độ rộng (Width) từ cuộn gốc
+            df[cgl_t] = df.groupby([order_c, 'base_coil'])[cgl_t].transform(lambda x: x.replace(0, pd.NA).ffill().bfill()).fillna(0)
+            df[cgl_w] = df.groupby([order_c, 'base_coil'])[cgl_w].transform(lambda x: x.replace(0, pd.NA).ffill().bfill()).fillna(0)
 
-            # 3. Handle missing data for Output
-            df[ccl_t] = df[ccl_t].fillna(0)
-            df[ccl_w] = df[ccl_w].fillna(0)
-            df[ccl_l] = df[ccl_l].fillna(0)
-
-            # --- GROUP BY MOTHER COIL ---
+            # --- GOM NHÓM THEO CUỘN MẸ ---
             s1 = df.groupby([order_c, mother_c]).agg({
                 cgl_t: 'mean', cgl_w: 'mean', cgl_l: 'first',
                 ccl_t: 'mean', ccl_w: 'mean', ccl_l: 'sum',
                 outer_cut: 'max', inner_cut: 'max' 
             }).reset_index()
 
-            # AGGREGATE ENTIRE ORDER
+            # TỔNG HỢP TOÀN BỘ ĐƠN HÀNG
             summary = s1.groupby(order_c).agg({
                 mother_c: 'count', cgl_l: 'sum', ccl_l: 'sum', 
                 outer_cut: 'sum', inner_cut: 'sum',
@@ -158,11 +157,15 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
 
             summary = summary.rename(columns={mother_c: 'Qty (Coils)', cgl_l: 'In_m', ccl_l: 'Out_m'})
             
-            # CALCULATE VARIANCE
+            # TÍNH TOÁN HAO HỤT
             summary['Total_Cut'] = summary[outer_cut] + summary[inner_cut]
             summary['Diff'] = summary['Out_m'] - (summary['In_m'] - summary['Total_Cut'])
             summary['Thick_Var'] = summary[ccl_t] - summary[cgl_t]
             summary['Area_m2'] = (summary[cgl_w] / 1000) * summary['Diff']
+
+            # ==========================================================
+            # GIAO DIỆN HIỂN THỊ (NGUYÊN BẢN 100% CỦA BẠN)
+            # ==========================================================
 
             # --- 1. ORDER SUMMARY ---
             st.subheader("1. Order Summary")
