@@ -23,7 +23,7 @@ html, body, [class*="css"]  {
     padding-bottom:2rem;
 }
 
-/* Card style ONLY for Charts, completely removed from DataFrames */
+/* Card style ONLY for Charts */
 div[data-testid="stVerticalBlock"] > div:has(div.stPlotlyChart) {
     border-radius:12px;
     box-shadow:0 6px 25px rgba(0,0,0,0.08);
@@ -206,19 +206,28 @@ if GSHEET_URL:
         out_grade_c = get_col("產出等級", ["產出等級", "产出等级"])
         next_proc_c = get_col("下製程", ["下製程", "下制程"])
 
+        # NEW: PAINT CONSUMPTION COLUMNS
+        theo_paint_c = get_col("合計理論耗用", ["合計理論耗用", "合计理论耗用", "理論耗用", "理论耗用"])
+        act_paint_c = get_col("合計實際耗用", ["合計實際耗用", "合计实际耗用", "實際耗用", "实际耗用"])
+
         try:
             for col in [line_c, out_grade_c, next_proc_c]:
                 if col not in df.columns:
                     df[col] = "-"
                 df[col] = df[col].fillna("-").astype(str)
 
-            for col in [outer_cut, inner_cut, cgl_t, cgl_w, cgl_l, ccl_t, ccl_w, ccl_l]:
+            for col in [outer_cut, inner_cut, cgl_t, cgl_w, cgl_l, ccl_t, ccl_w, ccl_l, theo_paint_c, act_paint_c]:
                 if col not in df.columns:
                     df[col] = 0
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
             df['is_first_baby'] = ~df.duplicated(subset=[order_c, baby_c], keep='first')
+            
+            # Deduplicate outputs & paint info for multiple rows of the same baby coil
             df[ccl_l] = df.apply(lambda r: r[ccl_l] if r['is_first_baby'] else 0, axis=1)
+            df[theo_paint_c] = df.apply(lambda r: r[theo_paint_c] if r['is_first_baby'] else 0, axis=1)
+            df[act_paint_c] = df.apply(lambda r: r[act_paint_c] if r['is_first_baby'] else 0, axis=1)
+
             df['base_coil'] = df[mother_c].astype(str).str[:-3]
             df['is_x00'] = df[mother_c].astype(str).str.endswith('X00', na=False)
             df['family_has_x00'] = df.groupby([order_c, 'base_coil'])['is_x00'].transform('any')
@@ -246,6 +255,7 @@ if GSHEET_URL:
             df[cgl_t] = df.groupby([order_c, 'base_coil'])[cgl_t].transform(lambda x: x.replace(0, pd.NA).ffill().bfill()).fillna(0)
             df[cgl_w] = df.groupby([order_c, 'base_coil'])[cgl_w].transform(lambda x: x.replace(0, pd.NA).ffill().bfill()).fillna(0)
 
+            # --- AGGREGATION LEVEL 1: MOTHER COIL ---
             s1 = df.groupby([order_c, mother_c]).agg({
                 cgl_t: 'mean',
                 cgl_w: 'mean',
@@ -254,9 +264,12 @@ if GSHEET_URL:
                 ccl_w: 'mean',
                 ccl_l: 'sum',
                 outer_cut: 'max',
-                inner_cut: 'max'
+                inner_cut: 'max',
+                theo_paint_c: 'sum', # Aggregate Paint
+                act_paint_c: 'sum'   # Aggregate Paint
             }).reset_index()
 
+            # --- AGGREGATION LEVEL 2: ORDER SUMMARY ---
             summary = s1.groupby(order_c).agg({
                 mother_c: 'count',
                 cgl_l: 'sum',
@@ -265,7 +278,9 @@ if GSHEET_URL:
                 inner_cut: 'sum',
                 ccl_t: 'mean',
                 cgl_t: 'mean',
-                cgl_w: 'mean'
+                cgl_w: 'mean',
+                theo_paint_c: 'sum', # Total Theo Paint per Order
+                act_paint_c: 'sum'   # Total Act Paint per Order
             }).reset_index()
 
             summary = summary.rename(columns={mother_c: 'Qty (Coils)', cgl_l: 'In_m', ccl_l: 'Out_m'})
@@ -274,24 +289,28 @@ if GSHEET_URL:
             summary['Thick_Var'] = summary[ccl_t] - summary[cgl_t]
             summary['Area_m2'] = (summary[cgl_w] / 1000) * summary['Diff']
 
+            # CALCULATE PERFORMANCE % AT ORDER LEVEL
+            summary['Perf_%'] = summary.apply(lambda x: (x[theo_paint_c] / x[act_paint_c] * 100) if x[act_paint_c] > 0 else 0, axis=1)
+
             # --- UI: ORDER SUMMARY ---
             st.subheader("1. Order Summary")
 
-            disp = summary[[order_c, 'Qty (Coils)', cgl_w, 'In_m', 'Total_Cut', 'Out_m', 'Diff', 'Thick_Var', 'Area_m2']].copy()
-            disp.columns = ['Order ID', 'Qty (Coils)', 'Input Width (mm)', 'Input (m)', 'Cut Scrap (m)', 'Output (m)', 'Diff (m)', 'Thick Var', 'Diff Area (m²)']
+            disp = summary[[order_c, 'Qty (Coils)', cgl_w, 'In_m', 'Total_Cut', 'Out_m', 'Diff', 'Area_m2', theo_paint_c, act_paint_c, 'Perf_%']].copy()
+            disp.columns = ['Order ID', 'Qty (Coils)', 'Input Width', 'Input (m)', 'Cut Scrap (m)', 'Output (m)', 'Diff (m)', 'Diff Area (m²)', 'Theo Paint (kg)', 'Act Paint (kg)', 'Yield (%)']
             disp = disp.sort_values(by='Cut Scrap (m)', ascending=False).reset_index(drop=True)
             disp.insert(0, 'No.', range(1, len(disp) + 1))
 
-            # REMOVED height parameter and ADDED .head(20) for compactness
             st.dataframe(
                 disp.head(20).set_index('No.').style.format({
-                    "Input Width (mm)": "{:,.0f}",
+                    "Input Width": "{:,.0f}",
                     "Input (m)": "{:,.0f}", 
                     "Cut Scrap (m)": "{:,.0f}", 
                     "Output (m)": "{:,.0f}",
                     "Diff (m)": "{:,.0f}", 
-                    "Thick Var": "{:.3f}", 
-                    "Diff Area (m²)": "{:,.0f}"
+                    "Diff Area (m²)": "{:,.0f}",
+                    "Theo Paint (kg)": "{:,.2f}",
+                    "Act Paint (kg)": "{:,.2f}",
+                    "Yield (%)": "{:.2f}%"
                 }), 
                 use_container_width=True
             )
@@ -308,7 +327,6 @@ if GSHEET_URL:
                 det_f = det[[mother_c, baby_c, line_c, out_grade_c, next_proc_c, cgl_t, cgl_w, cgl_l, outer_cut, inner_cut, ccl_t, ccl_w, 'Var', ccl_l]].copy()
                 det_f.columns = ['Input ID', 'Output ID', 'Line', 'Grade', 'Next Proc', 'In Thick', 'In Width', 'In Len', 'Outer Cut', 'Inner Cut', 'Out Thick', 'Out Width', 'Thick Dev', 'Out Len']
 
-                # REMOVED height parameter and ADDED .head(20) for compactness
                 st.dataframe(
                     det_f.head(20).style.format({
                         "In Thick": "{:.3f}", 
@@ -343,8 +361,14 @@ if GSHEET_URL:
 
             t_in, t_out = disp['Input (m)'].sum(), disp['Output (m)'].sum()
             area_s = abs(disp[disp['Diff (m)'] < 0]['Diff Area (m²)'].sum())
+            avg_yield = (disp['Theo Paint (kg)'].sum() / disp['Act Paint (kg)'].sum() * 100) if disp['Act Paint (kg)'].sum() > 0 else 0
 
-            st.markdown(f"**生產產出綜合分析:** \n* **總投入 (Total Input):** {t_in:,.0f} m  \n* **總產出 (Total Output):** {t_out:,.0f} m  \n* **不明面積差異 (Area Shortfall):** {area_s:,.2f} m²")
+            st.markdown(f"""
+            **生產產出綜合分析:** * **總投入 (Total Input):** {t_in:,.0f} m  
+            * **總產出 (Total Output):** {t_out:,.0f} m  
+            * **不明面積差異 (Area Shortfall):** {area_s:,.2f} m²
+            * **Hiệu suất trung bình (Avg Yield):** {avg_yield:.2f}%
+            """)
 
             st.subheader("5. Export Data")
 
