@@ -6,14 +6,14 @@ import streamlit.components.v1 as components
 import re
 
 # --- PAGE CONFIGURATION ---
-st.set_page_config(page_title="Steel Coil Length Variance & Yield Analysis Dashboard", layout="wide")
+st.set_page_config(page_title="Length Variance Analysis: Total CGL vs CCL per Order", layout="wide")
 
 # ==========================================================
 # 1. AUTO-SYNC CONFIGURATION
 # ==========================================================
 GSHEET_URL = "https://docs.google.com/spreadsheets/d/1-kayrLVYwOO66Xxc7Vk7dbTNZ5Aph4MVd9DMTz6RJS0/edit?gid=0#gid=0"
 
-# --- MINIMALIST DESIGN ---
+# --- MINIMALIST DESIGN: UNIFORM GRID LINES ---
 st.markdown("""
     <style>
     .stApp { background-color: #ffffff; }
@@ -28,20 +28,20 @@ st.markdown("""
         border-collapse: collapse !important; 
         font-family: 'Segoe UI', sans-serif;
         color: #334155;
-        border: 1px solid #94a3b8 !important;
+        border: 1px solid #e2e8f0 !important;
     }
     th { 
-        border: 1px solid #94a3b8 !important; 
-        color: #0f172a !important; 
+        border: 1px solid #e2e8f0 !important; 
+        color: #1e3a8a !important; 
         text-align: center !important; 
         padding: 12px 8px !important;
         font-size: 13px !important;
-        background-color: #cbd5e1 !important;
+        background-color: #f8fafc !important;
     }
     td { 
         text-align: center !important; 
         padding: 10px 8px !important; 
-        border: 1px solid #cbd5e1 !important; 
+        border: 1px solid #e2e8f0 !important; 
         font-size: 13px !important;
     }
     tr:hover { background-color: #f1f5f9; }
@@ -54,7 +54,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-st.title("Steel Coil Length Variance & Yield Analysis Dashboard")
+st.title("Length Variance Analysis: Total CGL vs CCL per Order")
 
 # --- DATA FETCHING ---
 @st.cache_data(ttl=300)
@@ -81,7 +81,6 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
     df = load_auto_data(GSHEET_URL)
     
     if df is not None:
-        # Smart column filter to prevent errors
         def get_col(default, possible_names):
             for name in possible_names:
                 if name in df.columns: return name
@@ -101,58 +100,57 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
 
         try:
             for col in [outer_cut, inner_cut]:
-                if col not in df.columns:
-                    df[col] = 0
+                if col not in df.columns: df[col] = 0
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
-            # 1. Convert all dimension columns to numeric
             for col in [cgl_t, cgl_w, cgl_l, ccl_t, ccl_w, ccl_l]:
                 if col not in df.columns: df[col] = 0
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
                 
             # --- AUTOMATIC ROUTING ALGORITHM ---
             
-            # Step 1: Prevent double counting for OUTPUT coils FIRST
-            # Keep the first occurrence of duplicate baby coils
+            # BƯỚC 1: LỌC CUỘN CON TRÙNG LẶP ĐỂ BẢO VỆ OUTPUT
             df['is_first_baby'] = ~df.duplicated(subset=[order_c, baby_c], keep='first')
             df[ccl_l] = df.apply(lambda r: r[ccl_l] if r['is_first_baby'] else 0, axis=1)
 
-            # Step 2: Extract root ID of mother coil
-            def get_root(s):
-                return re.sub(r'[A-Za-z]\d{2}$', '', str(s))
-            df['base_coil'] = df[mother_c].apply(get_root)
+            # BƯỚC 2: TÌM ROOT ID CỦA CUỘN MẸ
+            df['base_coil'] = df[mother_c].astype(str).str[:-3]
             
-            # Step 3: Check if root group has a main mother coil (X00/A00)
-            df['is_main_coil'] = df[mother_c].astype(str).str.contains(r'X00|A00', case=False, regex=True)
-            df['has_main'] = df.groupby([order_c, 'base_coil'])['is_main_coil'].transform('any')
+            # BƯỚC 3: KIỂM TRA ĐẶC TÍNH CỦA NHÓM PHÔI
+            df['is_x00'] = df[mother_c].astype(str).str.endswith('X00', na=False)
+            df['family_has_x00'] = df.groupby([order_c, 'base_coil'])['is_x00'].transform('any')
+            df['family_has_cgl'] = df.groupby([order_c, 'base_coil'])[cgl_l].transform(lambda x: (x > 0).any())
             
-            # Step 4: Prevent double counting for INPUT & SCRAP
+            # BƯỚC 4: LỌC CHỐNG CỘNG DỒN CỦA INPUT
             df['is_first_mother'] = ~df.duplicated(subset=[order_c, mother_c])
-            # Calculate sum of CCL using the deduplicated CCL values
             df['sum_ccl_by_mother'] = df.groupby([order_c, mother_c])[ccl_l].transform('sum')
 
             def resolve_input(row):
                 if not row['is_first_mother']: return 0
                 
                 if row[cgl_l] > 0:
-                    if not row['is_main_coil'] and row['has_main']: return 0
+                    # Quy tắc 1: Nếu nhóm có X00, chỉ X00 giữ CGL. Con cái (M00/P00) bị ép về 0
+                    if row['family_has_x00'] and not row['is_x00']: return 0
+                    # Quy tắc 2: Nếu không có X00, mọi anh em (A00, B00) đều giữ CGL
                     return row[cgl_l]
                 
-                if row[cgl_l] == 0 and not row['has_main']:
+                if row[cgl_l] == 0:
+                    # Quy tắc 3: Nếu anh em khác có CGL, cuộn trống số bị ép về 0
+                    if row['family_has_cgl']: return 0
+                    # Mồ côi hoàn toàn: Đắp số CCL qua
                     return row['sum_ccl_by_mother']
                 return 0
             
-            # Replace original data with filtered data
+            # ÉP SỐ LIỆU ĐÃ LỌC
             df[cgl_l] = df.apply(resolve_input, axis=1)
             df[outer_cut] = df.apply(lambda r: r[outer_cut] if r['is_first_mother'] else 0, axis=1)
             df[inner_cut] = df.apply(lambda r: r[inner_cut] if r['is_first_mother'] else 0, axis=1)
             # ------------------------------------------------------------------
 
-            # 2. Copy Thickness & Width from root coils
+            # Sao chép Thick/Width
             df[cgl_t] = df.groupby([order_c, 'base_coil'])[cgl_t].transform(lambda x: x.replace(0, pd.NA).ffill().bfill()).fillna(0)
             df[cgl_w] = df.groupby([order_c, 'base_coil'])[cgl_w].transform(lambda x: x.replace(0, pd.NA).ffill().bfill()).fillna(0)
 
-            # 3. Handle missing data for Output
             df[ccl_t] = df[ccl_t].fillna(0)
             df[ccl_w] = df[ccl_w].fillna(0)
             df[ccl_l] = df[ccl_l].fillna(0)
