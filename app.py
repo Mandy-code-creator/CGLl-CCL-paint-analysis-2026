@@ -6,55 +6,57 @@ import streamlit.components.v1 as components
 import re
 
 # --- PAGE CONFIGURATION ---
-st.set_page_config(page_title="Length Variance Analysis: Total CGL vs CCL per Order", layout="wide")
+st.set_page_config(page_title="Yield & Variance Analytics", layout="wide")
 
 # ==========================================================
 # 1. AUTO-SYNC CONFIGURATION
 # ==========================================================
 GSHEET_URL = "https://docs.google.com/spreadsheets/d/1-kayrLVYwOO66Xxc7Vk7dbTNZ5Aph4MVd9DMTz6RJS0/edit?gid=0#gid=0"
 
-# --- MINIMALIST DESIGN: UNIFORM GRID LINES (RESTORED TO ORIGINAL WHITE THEME) ---
+# --- DARK MODE DESIGN: PROFESSIONAL & HIGH CONTRAST ---
 st.markdown("""
     <style>
-    .stApp { background-color: #ffffff; }
+    .stApp { background-color: #0f172a; }
     div[data-testid="stVerticalBlock"] > div:has(div.stPlotlyChart), 
-    div[data-testid="stVerticalBlock"] > div:has(div.stDataFrame) {
-        background-color: #ffffff; padding: 20px; border-radius: 0px;
+    div[data-testid="stVerticalBlock"] > div:has(div.stTable) {
+        background-color: #1e293b; padding: 20px; border-radius: 8px;
         margin-bottom: 20px; border: none;
     }
-    h1, h2, h3 { color: #1e3a8a; font-family: 'Segoe UI', sans-serif; font-weight: 700 !important; }
-    /* Legacy table styles for markdown tables */
+    h1, h2, h3 { color: #f8fafc; font-family: 'Segoe UI', sans-serif; font-weight: 700 !important; }
     table { 
         width: 100% !important; 
         border-collapse: collapse !important; 
         font-family: 'Segoe UI', sans-serif;
-        color: #334155;
-        border: 1px solid #e2e8f0 !important;
+        color: #e2e8f0;
+        border: 1px solid #334155 !important;
     }
     th { 
-        border: 1px solid #e2e8f0 !important; 
-        color: #1e3a8a !important; 
+        border: 1px solid #334155 !important; 
+        color: #38bdf8 !important; 
         text-align: center !important; 
         padding: 12px 8px !important;
         font-size: 13px !important;
-        background-color: #f8fafc !important;
+        background-color: #0f172a !important;
     }
     td { 
         text-align: center !important; 
         padding: 10px 8px !important; 
-        border: 1px solid #e2e8f0 !important; 
+        border: 1px solid #334155 !important; 
         font-size: 13px !important;
     }
-    tr:hover { background-color: #f1f5f9; }
-    .stSelectbox label { color: #1e3a8a !important; font-weight: bold; }
+    tr:hover { background-color: #334155; }
+    .stSelectbox label { color: #f8fafc !important; }
+    .stMarkdown p { color: #cbd5e1 !important; }
     @media print {
         header, .stSidebar, .stButton, [data-testid="stHeader"], .stDivider, .stTextInput { display: none !important; }
         .main .block-container { max-width: 100% !important; padding: 0.5cm !important; }
+        table { border: 1px solid #000 !important; color: #000 !important; }
+        th, td { border: 0.5pt solid #ccc !important; }
     }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("Length Variance Analysis: Total CGL vs CCL per Order")
+st.title("Yield & Variance Analytics: Galvanized Steel Coils")
 
 # --- DATA FETCHING ---
 @st.cache_data(ttl=300)
@@ -178,7 +180,7 @@ if GSHEET_URL:
             summary['Area_m2'] = (summary[cgl_w] / 1000) * summary['Diff']
 
             # ==========================================================
-            # UI: INTERACTIVE DATA GRIDS (WITH EXCEL-LIKE SCROLLBARS)
+            # UI: SCROLLABLE DATA TABLES & VISUALS
             # ==========================================================
 
             # --- 1. ORDER SUMMARY ---
@@ -197,19 +199,16 @@ if GSHEET_URL:
             disp['Qty (Coils)'] = disp['Qty (Coils)'].astype(int)
             disp.insert(0, 'No.', range(1, len(disp) + 1))
             
-            # Using st.dataframe for native horizontal & vertical scrollbars
-            st.dataframe(
-                disp.set_index('No.').style.format({
+            # Wrap table in a scrollable container (displays ~20 items perfectly at a glance)
+            with st.container(height=800):
+                st.table(disp.set_index('No.').style.format({
                     "Input (m)": "{:,.0f}", "Cut Scrap (m)": "{:,.0f}", "Output (m)": "{:,.0f}",
                     "Diff (m)": "{:,.0f}", "Thick Var": "{:.0f}", "Diff Area (m²)": "{:,.0f}"
-                }),
-                height=600, 
-                use_container_width=True
-            )
+                }))
 
            # --- 2. DATA INSPECTION ---
             st.divider()
-            st.subheader("2. Production Coil Details (Data Inspection)") 
+            st.subheader("2. Data Inspection") 
             
             order_list = df[order_c].unique()
             
@@ -245,9 +244,9 @@ if GSHEET_URL:
                     'Output Length (m)'
                 ]
                 
-                # Interactive data grid for inspection details (integers only)
-                st.dataframe(
-                    det_f.style.format({
+                # Scrollable container for inspection data
+                with st.container(height=800):
+                    st.table(det_f.style.format({
                         "Input Thick (mm)": "{:.0f}", 
                         "Input Width (mm)": "{:.0f}", 
                         "Input Length (m)": "{:.0f}",
@@ -257,28 +256,57 @@ if GSHEET_URL:
                         "Output Width (mm)": "{:.0f}",
                         "Thick Deviation (mm)": "{:.0f}", 
                         "Output Length (m)": "{:.0f}"
-                    }),
-                    height=600,
-                    use_container_width=True
-                )
+                    }))
                 
             # --- 3. VISUAL INSIGHTS & ANALYSIS ---
             st.divider()
             st.subheader("3. Visual Insights & Analysis")
             
-            # Using bolder, darker colors for charts (Blues_r and Reds_r)
             f1 = px.bar(disp, x='Order ID', y='Diff Area (m²)', color='Diff (m)', 
-                        color_continuous_scale='Blues_r', title="Extra Area per Order")
+                        color_continuous_scale='Inferno', title="Extra Area per Order", template="plotly_dark")
             st.plotly_chart(f1, use_container_width=True)
             st.info("**分析結論:** 監控各訂單的塗層面積偏差。偏離中心值的數據代表生產投入與產出不一致，建議優先核對該批次的生產日誌。")
 
-            f2 = px.histogram(disp, x='Diff (m)', nbins=15, title="Production Variance Distribution")
+            f2 = px.histogram(disp, x='Diff (m)', nbins=15, title="Production Variance Distribution", template="plotly_dark")
+            f2.update_traces(marker_color='#38bdf8')
             st.plotly_chart(f2, use_container_width=True)
             st.warning("**分析結論:** 數據分布反映生產穩定性。離群值標示該訂單存在異常長度變化，需確認是物理延展、裁切損耗或是計量誤差。")
 
             disp_chart = disp.sort_values(by='Cut Scrap (m)', ascending=False)
             f3 = px.bar(disp_chart, x='Order ID', y='Cut Scrap (m)', 
                         title="Total Cut Scrap per Order (Outer + Inner)",
-                        color='Cut Scrap (m)', color_continuous_scale='Reds_r')
+                        color='Cut Scrap (m)', color_continuous_scale='Magma', template="plotly_dark")
             f3.update_layout(yaxis_title="Scrap Length (m)")
-            st.plotly_chart(f3, use_container
+            st.plotly_chart(f3, use_container_width=True)
+            st.error("**分析結論:** 各訂單的剪切廢料總量。監控此數據有助於評估來料質量與生產初期的裁切損耗。若數值異常偏高，需檢查鋼捲頭尾品質狀況。")
+
+            # --- 4. EXECUTIVE SUMMARY ---
+            st.divider()
+            st.subheader("4. Executive Summary")
+            t_in, t_out = disp['Input (m)'].sum(), disp['Output (m)'].sum()
+            area_s = abs(disp[disp['Diff (m)'] < 0]['Diff Area (m²)'].sum())
+            st.markdown(f"""
+            **生產產出綜合分析:**
+            * **總投入 (Total Input):** {t_in:,.0f} m
+            * **總產出 (Total Output):** {t_out:,.0f} m
+            * **不明面積差異 (Area Shortfall):** {area_s:,.2f} m² (需進一步核實廢料申報準確性)
+            """)
+
+            # --- 5. EXPORT ---
+            st.subheader("5. Export Data")
+            c1, c2 = st.columns(2)
+            with c1:
+                buf = io.BytesIO()
+                with pd.ExcelWriter(buf, engine='xlsxwriter') as writer:
+                    disp.to_excel(writer, sheet_name='Summary', index=False)
+                st.download_button("📊 Download Excel", data=buf.getvalue(), file_name="Report.xlsx", type="primary", use_container_width=True)
+            with c2:
+                components.html("""
+                    <script>function printPage() { window.parent.print(); }</script>
+                    <button onclick="printPage()" style="background-color: transparent; color: #38bdf8; border: 1.5px solid #38bdf8; 
+                    border-radius: 4px; padding: 10px; font-size: 14px; cursor: pointer; width: 100%; font-weight: 600;"> 
+                    Save as PDF Report </button>
+                """, height=70)
+
+        except Exception as e:
+            st.error(f"Logic Error: {e}")
