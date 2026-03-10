@@ -2,10 +2,9 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import io
-import streamlit.components.v1 as components
 
 # --- PAGE CONFIGURATION (Thiết kế nguyên bản) ---
-st.set_page_config(page_title="Length Variance Analysis: Total CGL vs CCL per Order", layout="wide")
+st.set_page_config(page_title="Length Variance Analysis", layout="wide")
 
 # ==========================================================
 # 1. AUTO-SYNC CONFIGURATION
@@ -49,7 +48,7 @@ def load_auto_data(url):
         return None
 
 # =============================
-# 2. CORE LOGIC (VẠN NĂNG)
+# 2. CORE LOGIC (SỬA LỖI INPUT = 0)
 # =============================
 if GSHEET_URL:
     df_raw = load_auto_data(GSHEET_URL)
@@ -57,14 +56,13 @@ if GSHEET_URL:
     if df_raw is not None:
         df = df_raw.copy()
         
-        # Hàm tìm cột thông minh để tránh lỗi Logic Error
+        # Tìm cột thông minh
         raw_cols = {c: str(c).strip().lower().replace(" ", "") for c in df.columns}
         def find_col(keywords, default):
             for orig, norm in raw_cols.items():
                 if all(k in norm for k in keywords): return orig
             return default
 
-        # Định nghĩa các cột chính
         order_c = find_col(["订单", "号码"], "訂單號碼")
         mother_c = find_col(["投入", "钢卷"], "投入鋼捲號碼")
         baby_c   = find_col(["产出", "钢卷"], "產出鋼捲號碼")
@@ -75,7 +73,7 @@ if GSHEET_URL:
         inner_cut = find_col(["inner", "cut"], "innercutlength")
 
         try:
-            # 1. Ép kiểu số cho các cột tính toán
+            # 1. Chuyển đổi số liệu
             numeric_cols = [cgl_l, ccl_l, outer_cut, inner_cut, cgl_w]
             for c in numeric_cols:
                 if c in df.columns:
@@ -83,41 +81,39 @@ if GSHEET_URL:
                 else:
                     df[c] = 0
 
-            # 2. LOGIC HUYẾT THỐNG: Gom nhóm theo gốc phôi (Root ID)
-            df['root_id'] = df[mother_c].astype(str).str[:-3]
+            # 2. LOGIC TÍNH INPUT MỚI (KHẮC PHỤC LỖI TOÀN SỐ 0)
+            # Bước A: Xác định Root ID (Dùng 7 ký tự đầu thay vì cắt 3 để chính xác hơn)
+            df['root_id'] = df[mother_c].astype(str).str[:7]
             
-            # 3. KIỂM TRA MỒ CÔI: Đơn hàng có cuộn mẹ gốc (X00/A00) hay không?
-            df['is_main'] = df[mother_c].astype(str).str.contains('x00|a00', case=False)
-            df['has_main_in_order'] = df.groupby([order_c, 'root_id'])['is_main'].transform('any')
-
-            # 4. CHỐNG CỘNG DỒN: Chỉ dòng đầu tiên của mỗi Mother ID được xét Input
+            # Bước B: Đánh dấu dòng đầu tiên của mỗi Mother ID thực tế để lấy CGL
             df['is_first_mother'] = ~df.duplicated(subset=[order_c, mother_c])
             
-            def calculate_final_input(row):
-                # Nếu có số CGL thực tế và là dòng đầu tiên của cuộn đó
+            # Bước C: Kiểm tra xem nhóm phôi này có cuộn mẹ gốc (X00/A00) mang số CGL hay không
+            df['is_main'] = df[mother_c].astype(str).str.contains('X00|A00', case=False)
+            df['has_main_with_val'] = (df['is_main']) & (df[cgl_l] > 0)
+            df['main_present'] = df.groupby([order_c, 'root_id'])['has_main_with_val'].transform('any')
+
+            def resolve_input(row):
+                # Ưu tiên 1: Nếu dòng có số CGL thực tế (>0)
                 if row['is_first_mother'] and row[cgl_l] > 0:
-                    # Chống cộng dồn: nếu đã có X00 gánh team thì cuộn con = 0
-                    if not row['is_main'] and row['has_main_in_order']:
+                    # Nếu là cuộn con nhưng cùng nhóm đã có cuộn mẹ X00/A00 gánh số -> trả về 0
+                    if not row['is_main'] and row['main_present']:
                         return 0
                     return row[cgl_l]
                 
-                # Xử lý cuộn mồ côi hoặc trống số (nhóm 134, 983)
+                # Ưu tiên 2: Nếu dòng trống số CGL nhưng là cuộn mồ côi (không có main trong nhóm)
                 if row['is_first_mother'] and row[cgl_l] == 0:
-                    if not row['has_main_in_order']:
-                        # Chỉ lấy đúng dòng đầu tiên của cuộn mồ côi từ CCL đắp qua
-                        return row[ccl_l] 
+                    if not row['main_present']:
+                        # Lấy CCL đắp qua cho dòng đầu tiên xuất hiện
+                        return row[ccl_l]
                 return 0
 
-            df['final_input'] = df.apply(calculate_final_input, axis=1)
+            df['final_input'] = df.apply(resolve_input, axis=1)
 
-            # --- TỔNG HỢP THEO ĐƠN HÀNG ---
+            # --- TỔNG HỢP ---
             summary = df.groupby(order_c).agg({
-                mother_c: 'count',
-                'final_input': 'sum', # Đây chính là con số khớp thực tế 19,680
-                ccl_l: 'sum',
-                outer_cut: 'sum',
-                inner_cut: 'sum',
-                cgl_w: 'mean'
+                mother_c: 'count', 'final_input': 'sum', ccl_l: 'sum',
+                outer_cut: 'sum', inner_cut: 'sum', cgl_w: 'mean'
             }).reset_index()
 
             summary = summary.rename(columns={mother_c: 'Qty', 'final_input': 'In_m', ccl_l: 'Out_m'})
@@ -125,42 +121,21 @@ if GSHEET_URL:
             summary['Diff'] = summary['Out_m'] - (summary['In_m'] - summary['Total_Cut'])
             summary['Diff_Area'] = (summary[cgl_w] / 1000) * summary['Diff']
 
-            # --- HIỂN THỊ 1. ORDER SUMMARY ---
+            # --- HIỂN THỊ ---
             st.subheader("1. Order Summary")
-            disp = summary[[order_c, 'Qty', 'In_m', 'Total_Cut', 'Out_m', 'Diff', 'Diff_Area']].copy()
+            disp = summary[[order_c, 'Qty', 'In_m', 'Total_Cut', 'Out_m', 'Diff', 'Diff_Area']]
             disp.columns = ['Order ID', 'Coils', 'Input (m)', 'Cut Scrap (m)', 'Output (m)', 'Diff (m)', 'Diff Area (m²)']
-            
-            st.table(disp.sort_values('Diff (m)').style.format({
-                "Input (m)": "{:,.0f}", "Cut Scrap (m)": "{:,.0f}", "Output (m)": "{:,.0f}",
-                "Diff (m)": "{:.2f}", "Diff Area (m²)": "{:.2f}"
+            st.table(disp.style.format({
+                "Input (m)": "{:,.0f}", "Output (m)": "{:,.0f}", "Diff (m)": "{:.2f}", "Diff Area (m²)": "{:.2f}"
             }))
 
-            # --- HIỂN THỊ 2. PRODUCTION COIL DETAILS ---
             st.divider()
             st.subheader("2. Production Coil Details")
-            order_list = df[order_c].unique()
-            sel_order = st.selectbox("🔍 Search Order ID:", options=order_list, index=None, placeholder="Type to search...")
-            
+            sel_order = st.selectbox("🔍 Search Order ID:", options=df[order_c].unique(), index=None)
             if sel_order:
-                det = df[df[order_c] == sel_order].copy()
-                det_f = det[[mother_c, baby_c, cgl_l, 'final_input', ccl_l]]
-                det_f.columns = ['Input Coil ID', 'Output Coil ID', 'Original CGL (m)', 'Final Input (m)', 'Output CCL (m)']
-                st.table(det_f.style.format({
-                    "Original CGL (m)": "{:,.0f}", "Final Input (m)": "{:,.0f}", "Output CCL (m)": "{:,.0f}"
-                }))
-
-            # --- HIỂN THỊ 3. VISUAL INSIGHTS ---
-            st.divider()
-            st.subheader("3. Visual Insights")
-            f1 = px.bar(disp, x='Order ID', y='Diff Area (m²)', color='Diff (m)', 
-                        color_continuous_scale='RdBu', title="Extra Area per Order")
-            st.plotly_chart(f1, use_container_width=True)
-
-            # Nút Download
-            buf = io.BytesIO()
-            with pd.ExcelWriter(buf, engine='xlsxwriter') as writer:
-                disp.to_excel(writer, sheet_name='Summary', index=False)
-            st.download_button("📊 Download Excel Report", data=buf.getvalue(), file_name="Length_Report.xlsx", type="primary")
+                check = df[df[order_c] == sel_order][[mother_c, baby_c, cgl_l, 'final_input', ccl_l]]
+                check.columns = ['Input ID', 'Output ID', 'CGL Original', 'Final Input', 'CCL Output']
+                st.table(check.style.format({"CGL Original": "{:,.0f}", "Final Input": "{:,.0f}", "CCL Output": "{:,.0f}"}))
 
         except Exception as e:
-            st.error(f"Logic Error: {e}. Vui lòng kiểm tra tên cột trên Google Sheet.")
+            st.error(f"Error: {e}")
