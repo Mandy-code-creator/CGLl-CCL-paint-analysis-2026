@@ -6,55 +6,50 @@ import streamlit.components.v1 as components
 import re
 
 # --- PAGE CONFIGURATION ---
-st.set_page_config(page_title="Dynamic Variance Analytics", layout="wide")
+st.set_page_config(page_title="Length Variance Analysis: Total CGL vs CCL per Order", layout="wide")
 
 # ==========================================================
-# 1. ANIMATED BACKGROUND CONFIGURATION
+# 1. THEME SELECTION (NEW FEATURE)
 # ==========================================================
-st.sidebar.header("🎨 Interface Settings")
-bg_style = st.sidebar.selectbox("Choose Background Style:", 
-                                ["Ocean Flow", "Forest Mist", "Sunset Glow", "Static Dark"])
+theme_choice = st.radio("🎨 Select App Theme:", ["Light Mode (Standard)", "Dark Mode (Professional)"], horizontal=True)
 
-# Định nghĩa các dải màu cho hiệu ứng chuyển động
-if bg_style == "Ocean Flow":
-    grad = "linear-gradient(-45deg, #0f172a, #1e3a8a, #0d9488, #0f172a)"
-elif bg_style == "Forest Mist":
-    grad = "linear-gradient(-45deg, #064e3b, #065f46, #0f172a, #064e3b)"
-elif bg_style == "Sunset Glow":
-    grad = "linear-gradient(-45deg, #4c1d95, #831843, #0f172a, #4c1d95)"
+if theme_choice == "Dark Mode (Professional)":
+    bg_color = "#0f172a"
+    card_bg = "#1e293b"
+    text_color = "#f8fafc"
+    sub_text = "#cbd5e1"
+    table_border = "#334155"
+    header_bg = "#0f172a"
+    plotly_template = "plotly_dark"
+    accent_color = "#38bdf8"
 else:
-    grad = "none"
+    bg_color = "#ffffff"
+    card_bg = "#ffffff"
+    text_color = "#1e3a8a"
+    sub_text = "#334155"
+    table_border = "#e2e8f0"
+    header_bg = "#f8fafc"
+    plotly_template = "plotly_white"
+    accent_color = "#1e3a8a"
 
-# CSS tạo hiệu ứng màu nền chạy liên tục
 st.markdown(f"""
     <style>
-    .stApp {{
-        background: {grad if grad != "none" else "#0f172a"};
-        background-size: 400% 400%;
-        animation: gradient 15s ease infinite;
-    }}
-    @keyframes gradient {{
-        0% {{ background-position: 0% 50%; }}
-        50% {{ background-position: 100% 50%; }}
-        100% {{ background-position: 0% 50%; }}
-    }}
-    /* Làm cho các khung chứa dữ liệu trong suốt nhẹ để thấy nền chạy phía sau */
+    .stApp {{ background-color: {bg_color}; }}
     div[data-testid="stVerticalBlock"] > div:has(div.stPlotlyChart), 
     div[data-testid="stVerticalBlock"] > div:has(div.stDataFrame) {{
-        background-color: rgba(30, 41, 59, 0.7); 
-        backdrop-filter: blur(10px);
-        padding: 20px; border-radius: 12px;
-        margin-bottom: 20px; border: 1px solid rgba(255,255,255,0.1);
+        background-color: {card_bg}; padding: 20px; border-radius: 8px;
+        margin-bottom: 20px; border: {"1px solid " + table_border if theme_choice == "Light Mode (Standard)" else "none"};
     }}
-    h1, h2, h3 {{ color: #ffffff; font-family: 'Segoe UI', sans-serif; text-shadow: 2px 2px 4px rgba(0,0,0,0.5); }}
-    .stMarkdown p {{ color: #e2e8f0 !important; }}
+    h1, h2, h3 {{ color: {text_color}; font-family: 'Segoe UI', sans-serif; font-weight: 700 !important; }}
+    .stMarkdown p {{ color: {sub_text} !important; }}
+    .stSelectbox label, .stRadio label {{ color: {text_color} !important; font-weight: bold; }}
     </style>
     """, unsafe_allow_html=True)
 
-st.title("🚀 Dynamic Length Variance Analytics")
+st.title("Length Variance Analysis: Total CGL vs CCL per Order")
 
 # ==========================================================
-# 2. CORE LOGIC (KEEPING YOUR ORIGINAL LOGIC)
+# 2. DATA PROCESSING (YOUR ORIGINAL LOGIC)
 # ==========================================================
 GSHEET_URL = "https://docs.google.com/spreadsheets/d/1-kayrLVYwOO66Xxc7Vk7dbTNZ5Aph4MVd9DMTz6RJS0/edit?gid=0#gid=0"
 
@@ -63,7 +58,9 @@ def load_auto_data(url):
     try:
         if "docs.google.com/spreadsheets" in url:
             base_url = url.split('/edit')[0]
-            gid = url.split("gid=")[1].split("&")[0] if "gid=" in url else "0"
+            gid = "0"
+            if "gid=" in url:
+                gid = url.split("gid=")[1].split("&")[0]
             csv_url = f"{base_url}/export?format=csv&gid={gid}"
             df = pd.read_csv(csv_url)
             df.columns = df.columns.astype(str).str.strip().str.lower().str.replace(r'\s+', '', regex=True)
@@ -76,7 +73,6 @@ def load_auto_data(url):
 if GSHEET_URL:
     df = load_auto_data(GSHEET_URL)
     if df is not None:
-        # --- Mapping Columns ---
         def get_col(default, possible_names):
             for name in possible_names:
                 if name in df.columns: return name
@@ -87,8 +83,8 @@ if GSHEET_URL:
         baby_c = get_col("產出鋼捲號碼", ["產出鋼捲號碼", "产出钢卷号码"])
         cgl_l = get_col("镀锌測長度", ["镀锌測長度", "镀锌實測長度", "镀锌长度", "鍍鋅測長度"])
         ccl_l = get_col("實測長度", ["實測長度", "实测长度"])
-        cgl_w = get_col("镀锌測寬度", ["镀锌測寬度", "镀锌測寬", "镀锌宽度"])
-        cgl_t = get_col("镀锌實測厚度", ["镀锌實測厚度", "镀锌測厚", "镀锌厚度"])
+        cgl_w = get_col("镀锌測寬度", ["镀锌測寬度", "镀锌測寬", "镀锌宽度", "鍍鋅測寬度", "镀锌实测宽度"])
+        cgl_t = get_col("镀锌實測厚度", ["镀锌實測厚度", "镀锌測厚", "镀锌厚度", "鍍鋅實測厚度"])
         ccl_w = get_col("實測寬度", ["實測寬度", "实测宽度"])
         ccl_t = get_col("實測厚度", ["實測厚度", "实测厚度"])
         outer_cut = get_col("outercutlength", ["outercutlength", "outercut"])
@@ -98,13 +94,15 @@ if GSHEET_URL:
         next_proc_c = get_col("下製程", ["下製程", "下制程"])
 
         try:
-            # Clean data
             for col in [line_c, out_grade_c, next_proc_c]:
+                if col not in df.columns: df[col] = "-"
                 df[col] = df[col].fillna("-").astype(str)
+
             for col in [outer_cut, inner_cut, cgl_t, cgl_w, cgl_l, ccl_t, ccl_w, ccl_l]:
+                if col not in df.columns: df[col] = 0
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
-            # --- YOUR ORIGINAL ROUTING LOGIC ---
+            # --- ROUTING LOGIC (RESTORED) ---
             df['is_first_baby'] = ~df.duplicated(subset=[order_c, baby_c], keep='first')
             df[ccl_l] = df.apply(lambda r: r[ccl_l] if r['is_first_baby'] else 0, axis=1)
             df['base_coil'] = df[mother_c].astype(str).str[:-3]
@@ -127,8 +125,9 @@ if GSHEET_URL:
             df[cgl_l] = df.apply(resolve_input, axis=1)
             df[outer_cut] = df.apply(lambda r: r[outer_cut] if r['is_first_mother'] else 0, axis=1)
             df[inner_cut] = df.apply(lambda r: r[inner_cut] if r['is_first_mother'] else 0, axis=1)
+            df[cgl_t] = df.groupby([order_c, 'base_coil'])[cgl_t].transform(lambda x: x.replace(0, pd.NA).ffill().bfill()).fillna(0)
+            df[cgl_w] = df.groupby([order_c, 'base_coil'])[cgl_w].transform(lambda x: x.replace(0, pd.NA).ffill().bfill()).fillna(0)
 
-            # Aggregate
             s1 = df.groupby([order_c, mother_c]).agg({
                 cgl_t: 'mean', cgl_w: 'mean', cgl_l: 'first',
                 ccl_t: 'mean', ccl_w: 'mean', ccl_l: 'sum',
@@ -141,36 +140,60 @@ if GSHEET_URL:
                 ccl_t: 'mean', cgl_t: 'mean', cgl_w: 'mean'
             }).reset_index()
 
-            summary = summary.rename(columns={mother_c: 'Qty', cgl_l: 'In_m', ccl_l: 'Out_m'})
-            summary['Diff'] = summary['Out_m'] - (summary['In_m'] - (summary[outer_cut] + summary[inner_cut]))
+            summary = summary.rename(columns={mother_c: 'Qty (Coils)', cgl_l: 'In_m', ccl_l: 'Out_m'})
+            summary['Total_Cut'] = summary[outer_cut] + summary[inner_cut]
+            summary['Diff'] = summary['Out_m'] - (summary['In_m'] - summary['Total_Cut'])
+            summary['Thick_Var'] = summary[ccl_t] - summary[cgl_t]
             summary['Area_m2'] = (summary[cgl_w] / 1000) * summary['Diff']
 
-            # --- 1. ORDER SUMMARY ---
-            st.subheader("📊 1. Order Summary")
-            disp = summary[[order_c, 'Qty', cgl_w, 'In_m', 'Out_m', 'Diff', 'Area_m2']].copy()
-            st.dataframe(disp.style.format({
-                "In_m": "{:,.0f}", "Out_m": "{:,.0f}", "Diff": "{:,.0f}", "Area_m2": "{:,.0f}"
-            }), height=400, use_container_width=True)
+            # --- UI: ORDER SUMMARY ---
+            st.subheader("1. Order Summary")
+            disp = summary[[order_c, 'Qty (Coils)', cgl_w, 'In_m', 'Total_Cut', 'Out_m', 'Diff', 'Thick_Var', 'Area_m2']].copy()
+            disp.columns = ['Order ID', 'Qty (Coils)', 'Input Width (mm)', 'Input (m)', 'Cut Scrap (m)', 'Output (m)', 'Diff (m)', 'Thick Var', 'Diff Area (m²)']
+            disp = disp.sort_values(by='Cut Scrap (m)', ascending=False).reset_index(drop=True)
+            disp.insert(0, 'No.', range(1, len(disp) + 1))
+            st.dataframe(disp.set_index('No.').style.format({
+                "Input Width (mm)": "{:,.0f}", "Input (m)": "{:,.0f}", "Cut Scrap (m)": "{:,.0f}", 
+                "Output (m)": "{:,.0f}", "Diff (m)": "{:,.0f}", "Thick Var": "{:.3f}", "Diff Area (m²)": "{:,.0f}"
+            }), height=500, use_container_width=True)
 
-           # --- 2. PRODUCTION COIL DETAILS ---
+           # --- UI: PRODUCTION COIL DETAILS ---
             st.divider()
-            st.subheader("🔍 2. Production Coil Details") 
-            sel_order = st.selectbox("Select Order ID:", options=df[order_c].unique(), index=None)
+            st.subheader("2. Production Coil Details") 
+            sel_order = st.selectbox("🔍 Select Order ID:", options=df[order_c].unique(), index=None)
             if sel_order:
                 det = df[df[order_c] == sel_order].copy()
-                det_f = det[[mother_c, baby_c, line_c, out_grade_c, next_proc_c, cgl_t, cgl_w, ccl_t, ccl_l]].copy()
-                st.dataframe(det_f.style.format({"cgl_t": "{:.3f}", "ccl_t": "{:.3f}"}), height=400, use_container_width=True)
+                det['Var'] = det[ccl_t] - det[cgl_t]
+                det_f = det[[mother_c, baby_c, line_c, out_grade_c, next_proc_c, cgl_t, cgl_w, cgl_l, outer_cut, inner_cut, ccl_t, ccl_w, 'Var', ccl_l]].copy()
+                det_f.columns = ['Input ID', 'Output ID', 'Line', 'Grade', 'Next Proc', 'In Thick', 'In Width', 'In Len', 'Outer Cut', 'Inner Cut', 'Out Thick', 'Out Width', 'Thick Dev', 'Out Len']
+                st.dataframe(det_f.style.format({
+                    "In Thick": "{:.3f}", "In Width": "{:,.0f}", "In Len": "{:,.0f}",
+                    "Outer Cut": "{:,.0f}", "Inner Cut": "{:,.0f}", "Out Thick": "{:.3f}", 
+                    "Out Width": "{:,.0f}", "Thick Dev": "{:.3f}", "Out Len": "{:,.0f}"
+                }), height=500, use_container_width=True)
                 
-            # --- 3. VISUAL INSIGHTS ---
+            # --- UI: VISUAL INSIGHTS ---
             st.divider()
-            st.subheader("📈 3. Visual Insights & Analysis")
-            col1, col2 = st.columns(2)
-            with col1:
-                st.plotly_chart(px.bar(disp, x=order_c, y='Area_m2', color='Diff', color_continuous_scale='Turbo', template="plotly_dark"), use_container_width=True)
-                st.info("**分析結論:** 監控各訂單的塗層面積偏差。")
-            with col2:
-                st.plotly_chart(px.bar(summary, x=order_c, y=outer_cut, title="Cut Scrap Analysis", template="plotly_dark"), use_container_width=True)
-                st.error("**分析結論:** 各訂單的剪切廢料總量。")
+            st.subheader("3. Visual Insights & Analysis")
+            st.plotly_chart(px.bar(disp, x='Order ID', y='Diff Area (m²)', color='Diff (m)', color_continuous_scale='Blues_r', template=plotly_template), use_container_width=True)
+            st.info("**分析結論:** 監控各訂單的塗層面積偏差。偏離中心值的數據代表生產投入與產出不一致，建議優先核對該批次的生產日誌。")
+
+            st.plotly_chart(px.bar(disp.sort_values(by='Cut Scrap (m)', ascending=False), x='Order ID', y='Cut Scrap (m)', color='Cut Scrap (m)', color_continuous_scale='Reds', template=plotly_template), use_container_width=True)
+            st.error("**分析結論:** 各訂單的剪切廢料總量。監控此數據有助於評估來料質量與生產初期的裁切損耗。若數值異常偏高，需檢查鋼捲頭尾品質狀況。")
+
+            # --- UI: EXECUTIVE SUMMARY ---
+            st.divider()
+            st.subheader("4. Executive Summary")
+            t_in, t_out = disp['Input (m)'].sum(), disp['Output (m)'].sum()
+            area_s = abs(disp[disp['Diff (m)'] < 0]['Diff Area (m²)'].sum())
+            st.markdown(f"**生產產出綜合分析:** \n* **總投入 (Total Input):** {t_in:,.0f} m  \n* **總產出 (Total Output):** {t_out:,.0f} m  \n* **不明面積差異 (Area Shortfall):** {area_s:,.2f} m²")
+
+            # --- UI: EXPORT ---
+            st.subheader("5. Export Data")
+            buf = io.BytesIO()
+            with pd.ExcelWriter(buf, engine='xlsxwriter') as writer:
+                disp.to_excel(writer, sheet_name='Summary', index=False)
+            st.download_button("📊 Download Excel Report", data=buf.getvalue(), file_name="Report.xlsx", type="primary")
 
         except Exception as e:
             st.error(f"Logic Error: {e}")
