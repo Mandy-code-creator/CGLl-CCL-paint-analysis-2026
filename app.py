@@ -305,16 +305,26 @@ if GSHEET_URL:
             summary[['Yield (%)', 'Scrap Loss (%)', 'Len Var Loss (%)', 'Other Causes (%)']] = summary.apply(calc_variance_breakdown, axis=1)
 
             # --- UI: ORDER SUMMARY ---
-            st.subheader("1. Order Summary & Variance Breakdown")
+            col1, col2 = st.columns([8, 2])
+            with col1:
+                st.subheader("1. Order Summary & Variance Breakdown")
+            with col2:
+                # NEW: Dropdown to control number of rows displayed
+                row_limit_summary = st.selectbox("Show rows:", options=[20, 50, 100, "All"], index=0, key="summary_rows")
 
-            # FIXED: Added 'Area_m2' back to the list so 'Diff Area (m²)' can be generated without error
             disp = summary[[order_c, 'Qty (Coils)', cgl_w, 'In_m', 'Total_Cut', 'Out_m', 'Diff', 'Area_m2', theo_paint_c, act_paint_c, 'Yield (%)', 'Scrap Loss (%)', 'Len Var Loss (%)', 'Other Causes (%)']].copy()
             disp.columns = ['Order ID', 'Qty (Coils)', 'Input Width', 'Input (m)', 'Cut Scrap (m)', 'Output (m)', 'Diff (m)', 'Diff Area (m²)', 'Theo Paint (kg)', 'Act Paint (kg)', 'Yield (%)', 'Scrap Loss (%)', 'Len Var Loss (%)', 'Other Causes (%)']
             disp = disp.sort_values(by='Cut Scrap (m)', ascending=False).reset_index(drop=True)
             disp.insert(0, 'No.', range(1, len(disp) + 1))
 
+            # Apply the selected row limit
+            if row_limit_summary == "All":
+                disp_view = disp
+            else:
+                disp_view = disp.head(row_limit_summary)
+
             st.dataframe(
-                disp.head(20).set_index('No.').style.format({
+                disp_view.set_index('No.').style.format({
                     "Input Width": "{:,.0f}",
                     "Input (m)": "{:,.0f}", 
                     "Cut Scrap (m)": "{:,.0f}", 
@@ -334,7 +344,13 @@ if GSHEET_URL:
             st.divider()
 
             # --- UI: PRODUCTION COIL DETAILS ---
-            st.subheader("2. Production Coil Details")
+            col3, col4 = st.columns([8, 2])
+            with col3:
+                st.subheader("2. Production Coil Details")
+            with col4:
+                 # NEW: Dropdown to control number of rows displayed
+                row_limit_details = st.selectbox("Show rows:", options=[20, 50, 100, "All"], index=0, key="details_rows")
+
             sel_order = st.selectbox("🔍 Select Order ID:", options=df[order_c].unique(), index=None)
 
             if sel_order:
@@ -343,8 +359,14 @@ if GSHEET_URL:
                 det_f = det[[mother_c, baby_c, line_c, out_grade_c, next_proc_c, cgl_t, cgl_w, cgl_l, outer_cut, inner_cut, ccl_t, ccl_w, 'Var', ccl_l]].copy()
                 det_f.columns = ['Input ID', 'Output ID', 'Line', 'Grade', 'Next Proc', 'In Thick', 'In Width', 'In Len', 'Outer Cut', 'Inner Cut', 'Out Thick', 'Out Width', 'Thick Dev', 'Out Len']
 
+                # Apply the selected row limit
+                if row_limit_details == "All":
+                    det_view = det_f
+                else:
+                    det_view = det_f.head(row_limit_details)
+
                 st.dataframe(
-                    det_f.head(20).style.format({
+                    det_view.style.format({
                         "In Thick": "{:.3f}", "In Width": "{:,.0f}", "In Len": "{:,.0f}",
                         "Outer Cut": "{:,.0f}", "Inner Cut": "{:,.0f}", "Out Thick": "{:.3f}", 
                         "Out Width": "{:,.0f}", "Thick Dev": "{:.3f}", "Out Len": "{:,.0f}"
