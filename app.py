@@ -68,6 +68,7 @@ def load_auto_data(url):
                 gid = url.split("gid=")[1].split("&")[0]
             csv_url = f"{base_url}/export?format=csv&gid={gid}"
             df = pd.read_csv(csv_url)
+            # Remove spaces to avoid typo issues
             df.columns = df.columns.astype(str).str.strip().str.lower().str.replace(r'\s+', '', regex=True)
             return df
         return None
@@ -98,8 +99,19 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
         ccl_t = get_col("實測厚度", ["實測厚度", "实测厚度"])
         outer_cut = get_col("outercutlength", ["outercutlength", "outercut"])
         inner_cut = get_col("innercutlength", ["innercutlength", "innercut"])
+        
+        # New columns for Grade and Next Process
+        out_grade_c = get_col("產出等級", ["產出等級", "产出等级"])
+        next_proc_c = get_col("下製程", ["下製程", "下制程"])
 
         try:
+            # Handle string columns for safe mapping
+            for col in [out_grade_c, next_proc_c]:
+                if col not in df.columns:
+                    df[col] = "-"
+                df[col] = df[col].fillna("-").astype(str)
+
+            # Handle numeric columns
             for col in [outer_cut, inner_cut]:
                 if col not in df.columns: df[col] = 0
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
@@ -108,20 +120,20 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
                 if col not in df.columns: df[col] = 0
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
                 
-            # --- THUẬT TOÁN ĐỊNH TUYẾN CUỘN TỰ ĐỘNG ---
+            # --- AUTOMATIC ROUTING ALGORITHM ---
             
-            # BƯỚC 1: LỌC CUỘN CON TRÙNG LẶP ĐỂ BẢO VỆ OUTPUT
+            # STEP 1: PREVENT DOUBLE COUNTING FOR OUTPUT COILS
             df['is_first_baby'] = ~df.duplicated(subset=[order_c, baby_c], keep='first')
             df[ccl_l] = df.apply(lambda r: r[ccl_l] if r['is_first_baby'] else 0, axis=1)
 
-            # BƯỚC 2: TÌM ROOT ID CỦA CUỘN MẸ
+            # STEP 2: EXTRACT ROOT ID
             df['base_coil'] = df[mother_c].astype(str).str[:-3]
             
-            # BƯỚC 3: KIỂM TRA ĐẶC TÍNH CỦA NHÓM PHÔI
+            # STEP 3: CHECK GROUP CHARACTERISTICS
             df['is_x00'] = df[mother_c].astype(str).str.endswith('X00', na=False)
             df['family_has_x00'] = df.groupby([order_c, 'base_coil'])['is_x00'].transform('any')
             
-            # BƯỚC 4: LỌC CHỐNG CỘNG DỒN CỦA INPUT
+            # STEP 4: PREVENT DOUBLE COUNTING FOR INPUT
             df['is_first_mother'] = ~df.duplicated(subset=[order_c, mother_c])
             df['sum_ccl_by_mother'] = df.groupby([order_c, mother_c])[ccl_l].transform('sum')
 
@@ -140,13 +152,12 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
                 if row['family_has_x00'] and not row['is_x00']: return 0
                 return row[col]
             
-            # ÉP SỐ LIỆU ĐÃ LỌC
             df[cgl_l] = df.apply(resolve_input, axis=1)
             df[outer_cut] = df.apply(lambda r: resolve_scrap(r, outer_cut), axis=1)
             df[inner_cut] = df.apply(lambda r: resolve_scrap(r, inner_cut), axis=1)
             # ------------------------------------------------------------------
 
-            # Sao chép Thick/Width
+            # Copy Thick/Width
             df[cgl_t] = df.groupby([order_c, 'base_coil'])[cgl_t].transform(lambda x: x.replace(0, pd.NA).ffill().bfill()).fillna(0)
             df[cgl_w] = df.groupby([order_c, 'base_coil'])[cgl_w].transform(lambda x: x.replace(0, pd.NA).ffill().bfill()).fillna(0)
 
@@ -177,7 +188,7 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
             summary['Area_m2'] = (summary[cgl_w] / 1000) * summary['Diff']
 
             # ==========================================================
-            # GIAO DIỆN HIỂN THỊ 
+            # GIAO DIỆN HIỂN THỊ
             # ==========================================================
 
             # --- 1. ORDER SUMMARY ---
@@ -189,12 +200,10 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
             > * **負值 (-):** 長度短缺 (Shortage)，已扣除頭尾廢料 (Scrap Deducted)，可能源於感測器誤差。
             """)
 
-            # ĐÃ THÊM cgl_w VÀO BẢNG ORDER SUMMARY
             disp = summary[[order_c, 'Qty (Coils)', cgl_w, 'In_m', 'Total_Cut', 'Out_m', 'Diff', 'Thick_Var', 'Area_m2']].copy()
             disp.columns = ['Order ID', 'Qty (Coils)', 'Input Width (mm)', 'Input (m)', 'Cut Scrap (m)', 'Output (m)', 'Diff (m)', 'Thick Var', 'Diff Area (m²)']
             
             disp = disp.sort_values(by='Cut Scrap (m)', ascending=False).reset_index(drop=True)
-            
             disp['Qty (Coils)'] = disp['Qty (Coils)'].astype(int)
             disp.insert(0, 'No.', range(1, len(disp) + 1))
             
@@ -227,6 +236,7 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
                 
                 det_f = det[[
                     mother_c, baby_c, 
+                    out_grade_c, next_proc_c,
                     cgl_t, cgl_w, cgl_l, 
                     outer_cut, inner_cut,
                     ccl_t, ccl_w, 'Var', ccl_l 
@@ -235,6 +245,8 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
                 det_f.columns = [
                     'Input Coil ID (CGL)', 
                     'Output Coil ID (CCL)', 
+                    'Output Grade', 
+                    'Next Process',
                     'Input Thick (mm)', 
                     'Input Width (mm)', 
                     'Input Length (m)', 
@@ -246,17 +258,18 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
                     'Output Length (m)'
                 ]
                 
+                # FIXED: Chỉ mở khóa số thập phân cho 3 cột Thick
                 st.dataframe(
                     det_f.style.format({
-                        "Input Thick (mm)": "{:.0f}", 
-                        "Input Width (mm)": "{:,.0f}", 
-                        "Input Length (m)": "{:,.0f}",
-                        "Outer Cut (m)": "{:,.0f}",
-                        "Inner Cut (m)": "{:,.0f}",
-                        "Output Thick (mm)": "{:.0f}", 
-                        "Output Width (mm)": "{:,.0f}",
-                        "Thick Deviation (mm)": "{:.0f}", 
-                        "Output Length (m)": "{:,.0f}"
+                        "Input Thick (mm)": "{:.3f}", 
+                        "Input Width (mm)": "{:.0f}", 
+                        "Input Length (m)": "{:.0f}",
+                        "Outer Cut (m)": "{:.0f}",
+                        "Inner Cut (m)": "{:.0f}",
+                        "Output Thick (mm)": "{:.3f}", 
+                        "Output Width (mm)": "{:.0f}",
+                        "Thick Deviation (mm)": "{:.3f}", 
+                        "Output Length (m)": "{:.0f}"
                     }),
                     height=600,
                     use_container_width=True
