@@ -84,32 +84,30 @@ if GSHEET_URL:
             df[ccl_l] = pd.to_numeric(df[ccl_l], errors='coerce')
 
             # ================================
-            # 3. CALC INPUT M
+            # 3. CALC INPUT M (mother/orphan/split)
             # ================================
             def calc_input(group):
                 group = group.copy()
-                mothers = group[mother_c].unique()
-                result = []
-                for mother in mothers:
-                    m_group = group[group[mother_c]==mother].copy()
-                    m_group["Input_m"] = 0
+                group["Input_m"] = 0
 
-                    # Dòng đầu mother coil → lấy CGL (hoặc CCL nếu blank)
-                    first_cgl = m_group[cgl_l].iloc[0]
+                # 1. Mother coil đầu tiên (X00/A00/B00)
+                mother_mask = group[mother_c].astype(str).str[-3:] == "000"
+                if mother_mask.any():
+                    idx = group[mother_mask].index[0]
+                    first_cgl = group.loc[idx, cgl_l]
                     if pd.isna(first_cgl) or first_cgl==0:
-                        first_cgl = m_group[ccl_l].iloc[0]
-                    m_group.loc[m_group.index[0], "Input_m"] = first_cgl
+                        first_cgl = group.loc[idx, ccl_l]
+                    group.loc[idx, "Input_m"] = first_cgl
 
-                    # Các dòng còn lại
-                    for idx in m_group.index[1:]:
-                        # Nếu CGL blank hoặc 0 → orphan → Input = CCL
-                        if pd.isna(m_group.loc[idx, cgl_l]) or m_group.loc[idx, cgl_l]==0:
-                            m_group.loc[idx, "Input_m"] = m_group.loc[idx, ccl_l]
+                # 2. Orphan coil (không phải mother, CGL blank/0)
+                for idx in group.index:
+                    if group.loc[idx, "Input_m"] == 0:
+                        cgl_val = group.loc[idx, cgl_l]
+                        if pd.isna(cgl_val) or cgl_val==0:
+                            group.loc[idx, "Input_m"] = group.loc[idx, ccl_l]  # lấy CCL
                         else:
-                            # Split coil khác → 0
-                            m_group.loc[idx, "Input_m"] = 0
-                    result.append(m_group)
-                return pd.concat(result)
+                            group.loc[idx, "Input_m"] = 0  # split coil khác
+                return group
 
             df = df.groupby([order_c, "Root_ID"], group_keys=False).apply(calc_input)
 
@@ -267,5 +265,3 @@ Save as PDF Report
 
 else:
     st.info("Please insert the Google Sheet Link in the source code (GSHEET_URL).")
-
-
