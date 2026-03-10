@@ -13,20 +13,46 @@ st.set_page_config(page_title="Yield & Variance Analytics: Galvanized Steel Coil
 # ==========================================================
 GSHEET_URL = "https://docs.google.com/spreadsheets/d/1-kayrLVYwOO66Xxc7Vk7dbTNZ5Aph4MVd9DMTz6RJS0/edit?gid=0#gid=0"
 
-# --- MINIMALIST DESIGN: UNIFORM GRID LINES (WHITE THEME) ---
+# --- DARK MODE DESIGN ---
 st.markdown("""
     <style>
-    .stApp { background-color: #ffffff; }
+    .stApp { background-color: #0f172a; }
     div[data-testid="stVerticalBlock"] > div:has(div.stPlotlyChart), 
-    div[data-testid="stVerticalBlock"] > div:has(div.stDataFrame) {
-        background-color: #ffffff; padding: 20px; border-radius: 0px;
+    div[data-testid="stVerticalBlock"] > div:has(div.stDataFrame),
+    div[data-testid="stVerticalBlock"] > div:has(div.stTable) {
+        background-color: #1e293b; padding: 20px; border-radius: 8px;
         margin-bottom: 20px; border: none;
     }
-    h1, h2, h3 { color: #1e3a8a; font-family: 'Segoe UI', sans-serif; font-weight: 700 !important; }
-    .stSelectbox label { color: #1e3a8a !important; font-weight: bold; }
+    h1, h2, h3 { color: #f8fafc; font-family: 'Segoe UI', sans-serif; font-weight: 700 !important; }
+    table { 
+        width: 100% !important; 
+        border-collapse: collapse !important; 
+        font-family: 'Segoe UI', sans-serif;
+        color: #e2e8f0;
+        border: 1px solid #334155 !important;
+    }
+    th { 
+        border: 1px solid #334155 !important; 
+        color: #38bdf8 !important; 
+        text-align: center !important; 
+        padding: 12px 8px !important;
+        font-size: 13px !important;
+        background-color: #0f172a !important;
+    }
+    td { 
+        text-align: center !important; 
+        padding: 10px 8px !important; 
+        border: 1px solid #334155 !important; 
+        font-size: 13px !important;
+    }
+    tr:hover { background-color: #334155; }
+    .stSelectbox label { color: #f8fafc !important; font-weight: bold; }
+    .stMarkdown p { color: #cbd5e1 !important; }
     @media print {
         header, .stSidebar, .stButton, [data-testid="stHeader"], .stDivider, .stTextInput { display: none !important; }
         .main .block-container { max-width: 100% !important; padding: 0.5cm !important; }
+        table { border: 1px solid #000 !important; color: #000 !important; }
+        th, td { border: 0.5pt solid #ccc !important; }
     }
     </style>
     """, unsafe_allow_html=True)
@@ -93,31 +119,40 @@ if GSHEET_URL:
             df['is_first_baby'] = ~df.duplicated(subset=[order_c, baby_c], keep='first')
             df[ccl_l] = df.apply(lambda r: r[ccl_l] if r['is_first_baby'] else 0, axis=1)
 
-            # Step 2: Extract root ID of mother coil
+            # Step 2: Identify base family ID (Remove X00, A00, etc.)
             def get_root(s):
                 return re.sub(r'[A-Za-z]\d{2}$', '', str(s))
             df['base_coil'] = df[mother_c].apply(get_root)
             
-            # Step 3: Check if root group has a main mother coil (X00/A00)
-            df['is_main_coil'] = df[mother_c].astype(str).str.contains(r'X00|A00', case=False, regex=True)
-            df['has_main'] = df.groupby([order_c, 'base_coil'])['is_main_coil'].transform('any')
+            # Step 3: Check characteristics of the family group
+            df['is_x00'] = df[mother_c].astype(str).str.endswith('X00', na=False)
+            df['family_has_x00'] = df.groupby([order_c, 'base_coil'])['is_x00'].transform('any')
+            df['family_has_cgl'] = df.groupby([order_c, 'base_coil'])[cgl_l].transform(lambda x: (x > 0).any())
             
-            # Step 4: Prevent double counting for INPUT & SCRAP
+            # Step 4: Apply logic to calculate precise input length
             df['is_first_mother'] = ~df.duplicated(subset=[order_c, mother_c])
             df['sum_ccl_by_mother'] = df.groupby([order_c, mother_c])[ccl_l].transform('sum')
 
             def resolve_input(row):
+                # Only keep the first occurrence of the mother coil
                 if not row['is_first_mother']: return 0
                 
+                # If CGL length exists
                 if row[cgl_l] > 0:
-                    if not row['is_main_coil'] and row['has_main']: return 0
+                    # Rule 1: If family has X00, only X00 keeps the value. Children get 0.
+                    if row['family_has_x00'] and not row['is_x00']: return 0
+                    # Rule 2: If no X00, siblings (A00, B00) keep their own values.
                     return row[cgl_l]
                 
-                if row[cgl_l] == 0 and not row['has_main']:
+                # If CGL length is empty
+                if row[cgl_l] == 0:
+                    # Rule 3: If other siblings have CGL, this empty one gets 0.
+                    if row['family_has_cgl']: return 0
+                    # Rule 4: Total orphan. Use the sum of CCL.
                     return row['sum_ccl_by_mother']
                 return 0
             
-            # Replace original data with filtered data
+            # Apply the filtered data back to the columns
             df[cgl_l] = df.apply(resolve_input, axis=1)
             df[outer_cut] = df.apply(lambda r: r[outer_cut] if r['is_first_mother'] else 0, axis=1)
             df[inner_cut] = df.apply(lambda r: r[inner_cut] if r['is_first_mother'] else 0, axis=1)
@@ -174,9 +209,9 @@ if GSHEET_URL:
             disp['Qty (Coils)'] = disp['Qty (Coils)'].astype(int)
             disp.insert(0, 'No.', range(1, len(disp) + 1))
             
-            # Using st.dataframe for native scrollbars (Thick Var formatted to 3 decimal places)
+            # Display only the top 20 items using dataframe
             st.dataframe(
-                disp.set_index('No.').style.format({
+                disp.head(20).set_index('No.').style.format({
                     "Input (m)": "{:,.0f}", "Cut Scrap (m)": "{:,.0f}", "Output (m)": "{:,.0f}",
                     "Diff (m)": "{:,.0f}", "Thick Var": "{:.3f}", "Diff Area (m²)": "{:,.0f}"
                 }),
@@ -222,9 +257,9 @@ if GSHEET_URL:
                     'Output Length (m)'
                 ]
                 
-                # Interactive data grid for inspection details (all formatted as integers)
+                # Interactive data grid for inspection details (top 20, integers only)
                 st.dataframe(
-                    det_f.style.format({
+                    det_f.head(20).style.format({
                         "Input Thick (mm)": "{:.0f}", 
                         "Input Width (mm)": "{:.0f}", 
                         "Input Length (m)": "{:.0f}",
@@ -243,19 +278,21 @@ if GSHEET_URL:
             st.divider()
             st.subheader("3. Visual Insights & Analysis")
             
-            f1 = px.bar(disp, x='Order ID', y='Diff Area (m²)', color='Diff (m)', 
-                        color_continuous_scale='Blues_r', title="Extra Area per Order")
+            # Use darker color scales
+            f1 = px.bar(disp.head(20), x='Order ID', y='Diff Area (m²)', color='Diff (m)', 
+                        color_continuous_scale='Inferno', title="Extra Area per Order", template="plotly_dark")
             st.plotly_chart(f1, use_container_width=True)
             st.info("**分析結論:** 監控各訂單的塗層面積偏差。偏離中心值的數據代表生產投入與產出不一致，建議優先核對該批次的生產日誌。")
 
-            f2 = px.histogram(disp, x='Diff (m)', nbins=15, title="Production Variance Distribution")
+            f2 = px.histogram(disp, x='Diff (m)', nbins=15, title="Production Variance Distribution", template="plotly_dark")
+            f2.update_traces(marker_color='#38bdf8')
             st.plotly_chart(f2, use_container_width=True)
             st.warning("**分析結論:** 數據分布反映生產穩定性。離群值標示該訂單存在異常長度變化，需確認是物理延展、裁切損耗或是計量誤差。")
 
-            disp_chart = disp.sort_values(by='Cut Scrap (m)', ascending=False)
+            disp_chart = disp.sort_values(by='Cut Scrap (m)', ascending=False).head(20)
             f3 = px.bar(disp_chart, x='Order ID', y='Cut Scrap (m)', 
                         title="Total Cut Scrap per Order (Outer + Inner)",
-                        color='Cut Scrap (m)', color_continuous_scale='Reds_r')
+                        color='Cut Scrap (m)', color_continuous_scale='Magma', template="plotly_dark")
             f3.update_layout(yaxis_title="Scrap Length (m)")
             st.plotly_chart(f3, use_container_width=True)
             st.error("**分析結論:** 各訂單的剪切廢料總量。監控此數據有助於評估來料質量與生產初期的裁切損耗。若數值異常偏高，需檢查鋼捲頭尾品質狀況。")
@@ -283,7 +320,7 @@ if GSHEET_URL:
             with c2:
                 components.html("""
                     <script>function printPage() { window.parent.print(); }</script>
-                    <button onclick="printPage()" style="background-color: white; color: #1e3a8a; border: 1.5px solid #1e3a8a; 
+                    <button onclick="printPage()" style="background-color: transparent; color: #38bdf8; border: 1.5px solid #38bdf8; 
                     border-radius: 4px; padding: 10px; font-size: 14px; cursor: pointer; width: 100%; font-weight: 600;"> 
                     Save as PDF Report </button>
                 """, height=70)
