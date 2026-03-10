@@ -6,25 +6,24 @@ import streamlit.components.v1 as components
 import re
 
 # --- PAGE CONFIGURATION ---
-st.set_page_config(page_title="Yield & Variance Analytics", layout="wide")
+st.set_page_config(page_title="Yield & Variance Analytics: Galvanized Steel Coils", layout="wide")
 
 # ==========================================================
 # 1. AUTO-SYNC CONFIGURATION
 # ==========================================================
 GSHEET_URL = "https://docs.google.com/spreadsheets/d/1-kayrLVYwOO66Xxc7Vk7dbTNZ5Aph4MVd9DMTz6RJS0/edit?gid=0#gid=0"
 
-# --- DARK MODE DESIGN: PROFESSIONAL & HIGH CONTRAST ---
+# --- MINIMALIST DESIGN: UNIFORM GRID LINES (WHITE THEME) ---
 st.markdown("""
     <style>
-    .stApp { background-color: #0f172a; }
+    .stApp { background-color: #ffffff; }
     div[data-testid="stVerticalBlock"] > div:has(div.stPlotlyChart), 
     div[data-testid="stVerticalBlock"] > div:has(div.stDataFrame) {
-        background-color: #1e293b; padding: 20px; border-radius: 8px;
+        background-color: #ffffff; padding: 20px; border-radius: 0px;
         margin-bottom: 20px; border: none;
     }
-    h1, h2, h3 { color: #f8fafc; font-family: 'Segoe UI', sans-serif; font-weight: 700 !important; }
-    .stSelectbox label { color: #f8fafc !important; }
-    .stMarkdown p { color: #cbd5e1 !important; }
+    h1, h2, h3 { color: #1e3a8a; font-family: 'Segoe UI', sans-serif; font-weight: 700 !important; }
+    .stSelectbox label { color: #1e3a8a !important; font-weight: bold; }
     @media print {
         header, .stSidebar, .stButton, [data-testid="stHeader"], .stDivider, .stTextInput { display: none !important; }
         .main .block-container { max-width: 100% !important; padding: 0.5cm !important; }
@@ -175,20 +174,19 @@ if GSHEET_URL:
             disp['Qty (Coils)'] = disp['Qty (Coils)'].astype(int)
             disp.insert(0, 'No.', range(1, len(disp) + 1))
             
-            # Using st.dataframe for native horizontal & vertical scrollbars
-            # Height 700px naturally displays roughly 20 items at a time
+            # Using st.dataframe for native scrollbars (Thick Var formatted to 3 decimal places)
             st.dataframe(
                 disp.set_index('No.').style.format({
                     "Input (m)": "{:,.0f}", "Cut Scrap (m)": "{:,.0f}", "Output (m)": "{:,.0f}",
-                    "Diff (m)": "{:,.0f}", "Thick Var": "{:.0f}", "Diff Area (m²)": "{:,.0f}"
+                    "Diff (m)": "{:,.0f}", "Thick Var": "{:.3f}", "Diff Area (m²)": "{:,.0f}"
                 }),
-                height=700, 
+                height=600, 
                 use_container_width=True
             )
 
            # --- 2. DATA INSPECTION ---
             st.divider()
-            st.subheader("2. Data Inspection") 
+            st.subheader("2. Production Coil Details (Data Inspection)") 
             
             order_list = df[order_c].unique()
             
@@ -224,7 +222,7 @@ if GSHEET_URL:
                     'Output Length (m)'
                 ]
                 
-                # Interactive data grid for inspection details, formatted to integer only
+                # Interactive data grid for inspection details (all formatted as integers)
                 st.dataframe(
                     det_f.style.format({
                         "Input Thick (mm)": "{:.0f}", 
@@ -237,7 +235,7 @@ if GSHEET_URL:
                         "Thick Deviation (mm)": "{:.0f}", 
                         "Output Length (m)": "{:.0f}"
                     }),
-                    height=700,
+                    height=600,
                     use_container_width=True
                 )
                 
@@ -246,19 +244,18 @@ if GSHEET_URL:
             st.subheader("3. Visual Insights & Analysis")
             
             f1 = px.bar(disp, x='Order ID', y='Diff Area (m²)', color='Diff (m)', 
-                        color_continuous_scale='Inferno', title="Extra Area per Order", template="plotly_dark")
+                        color_continuous_scale='Blues_r', title="Extra Area per Order")
             st.plotly_chart(f1, use_container_width=True)
             st.info("**分析結論:** 監控各訂單的塗層面積偏差。偏離中心值的數據代表生產投入與產出不一致，建議優先核對該批次的生產日誌。")
 
-            f2 = px.histogram(disp, x='Diff (m)', nbins=15, title="Production Variance Distribution", template="plotly_dark")
-            f2.update_traces(marker_color='#38bdf8')
+            f2 = px.histogram(disp, x='Diff (m)', nbins=15, title="Production Variance Distribution")
             st.plotly_chart(f2, use_container_width=True)
             st.warning("**分析結論:** 數據分布反映生產穩定性。離群值標示該訂單存在異常長度變化，需確認是物理延展、裁切損耗或是計量誤差。")
 
             disp_chart = disp.sort_values(by='Cut Scrap (m)', ascending=False)
             f3 = px.bar(disp_chart, x='Order ID', y='Cut Scrap (m)', 
                         title="Total Cut Scrap per Order (Outer + Inner)",
-                        color='Cut Scrap (m)', color_continuous_scale='Magma', template="plotly_dark")
+                        color='Cut Scrap (m)', color_continuous_scale='Reds_r')
             f3.update_layout(yaxis_title="Scrap Length (m)")
             st.plotly_chart(f3, use_container_width=True)
             st.error("**分析結論:** 各訂單的剪切廢料總量。監控此數據有助於評估來料質量與生產初期的裁切損耗。若數值異常偏高，需檢查鋼捲頭尾品質狀況。")
@@ -286,7 +283,7 @@ if GSHEET_URL:
             with c2:
                 components.html("""
                     <script>function printPage() { window.parent.print(); }</script>
-                    <button onclick="printPage()" style="background-color: transparent; color: #38bdf8; border: 1.5px solid #38bdf8; 
+                    <button onclick="printPage()" style="background-color: white; color: #1e3a8a; border: 1.5px solid #1e3a8a; 
                     border-radius: 4px; padding: 10px; font-size: 14px; cursor: pointer; width: 100%; font-weight: 600;"> 
                     Save as PDF Report </button>
                 """, height=70)
