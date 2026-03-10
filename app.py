@@ -12,6 +12,9 @@ st.set_page_config(page_title="Length Variance Analysis: Total CGL vs CCL per Or
 # ==========================================================
 GSHEET_URL = "https://docs.google.com/spreadsheets/d/1-kayrLVYwOO66Xxc7Vk7dbTNZ5Aph4MVd9DMTz6RJS0/edit?gid=0#gid=0"
 
+# 🔴 ĐIỀN TÊN TIÊU ĐỀ CỦA CỘT "AL" BÊN GOOGLE SHEET VÀO ĐÂY (Để đắp số cho cuộn mồ côi):
+AL_COLUMN_NAME = "Tên_cột_AL_của_bạn" # Ví dụ: "實測長度"
+
 # --- MINIMALIST DESIGN: UNIFORM GRID LINES ---
 st.markdown("""
     <style>
@@ -97,21 +100,48 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
             for col in [cgl_t, cgl_w, cgl_l, ccl_t, ccl_w, ccl_l]:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
                 
-            # 2. Sao chép Độ dày (Thick) & Độ rộng (Width) từ cuộn mẹ gốc (X00) cho các cuộn xẻ (M00, P00)
-            df[cgl_t] = df.groupby(order_c)[cgl_t].transform(lambda x: x.ffill().bfill()).fillna(0)
-            df[cgl_w] = df.groupby(order_c)[cgl_w].transform(lambda x: x.ffill().bfill()).fillna(0)
+            # --- THUẬT TOÁN NHẬN DIỆN CUỘN MỒ CÔI (SMART ORPHAN COIL LOGIC) ---
+            # Bước A: Tách lấy gốc của cuộn mẹ (Ví dụ: '4BC134M00' -> '4BC134')
+            df['base_coil'] = df[mother_c].astype(str).str.replace(r'[A-Za-z]\d{2}$', '', regex=True)
             
-            # 3. CHỐNG DOUBLE COUNT: Các cuộn M00, P00 bị rỗng chiều dài CGL sẽ tự động bằng 0. 
-            # Chỉ có cuộn mẹ gốc X00 là mang chiều dài Input thực tế.
-            df[cgl_l] = df[cgl_l].fillna(0)
+            # Bước B: Kiểm tra xem cuộn gốc 'X00' có tồn tại trong đơn hàng này không?
+            is_main_coil = df[mother_c].astype(str).str.endswith('X00')
+            main_coil_present = df[is_main_coil].groupby([order_c, 'base_coil']).size().reset_index(name='has_main')
+            
+            df = df.merge(main_coil_present, on=[order_c, 'base_coil'], how='left')
+            df['has_main'] = df['has_main'].fillna(0) > 0
 
-            # 4. Tránh lỗi mất dữ liệu với các ô vô tình bị trống ở khâu CCL
+            # Bước C: Xử lý cột AL
+            al_col_norm = AL_COLUMN_NAME.strip().lower().replace(" ", "")
+            has_al_col = al_col_norm in df.columns
+            if has_al_col:
+                df[al_col_norm] = pd.to_numeric(df[al_col_norm], errors='coerce').fillna(0)
+            elif AL_COLUMN_NAME != "Tên_cột_AL_của_bạn":
+                st.warning(f"⚠️ Không tìm thấy cột '{AL_COLUMN_NAME}'. App tạm dùng 0 cho cuộn mồ côi.")
+
+            # Bước D: Hàm quyết định chiều dài Input (cgl_l)
+            def resolve_cgl_l(row):
+                val = row[cgl_l]
+                if pd.isna(val) or val == 0:
+                    if row['has_main']:
+                        return 0  # Đã có X00 gánh chiều dài -> Trả về 0 để tránh cộng dồn kép
+                    else:
+                        return row[al_col_norm] if has_al_col else 0  # Cuộn mồ côi X00 -> Lấy chiều dài từ cột AL
+                return val
+
+            df[cgl_l] = df.apply(resolve_cgl_l, axis=1)
+            # ------------------------------------------------------------------
+
+            # 2. Sao chép Độ dày (Thick) & Độ rộng (Width) từ cuộn gốc cho các cuộn xẻ cùng huyết thống
+            df[cgl_t] = df.groupby([order_c, 'base_coil'])[cgl_t].transform(lambda x: x.ffill().bfill()).fillna(0)
+            df[cgl_w] = df.groupby([order_c, 'base_coil'])[cgl_w].transform(lambda x: x.ffill().bfill()).fillna(0)
+
+            # 3. Tránh lỗi mất dữ liệu với các ô vô tình bị trống ở khâu CCL
             df[ccl_t] = df[ccl_t].fillna(0)
             df[ccl_w] = df[ccl_w].fillna(0)
             df[ccl_l] = df[ccl_l].fillna(0)
 
-            # --- GOM NHÓM THEO CUỘN MẸ (MÔ PHỎNG HÀM COUNTIF CỦA BẠN) ---
-            # Hàm 'first' cho cgl_l chỉ lấy số lần xuất hiện đầu tiên, các dòng lặp lại của cuộn con sẽ bị bỏ qua
+            # --- GOM NHÓM THEO CUỘN MẸ (Tương tự COUNTIF trong Excel) ---
             s1 = df.groupby([order_c, mother_c]).agg({
                 cgl_t: 'mean', cgl_w: 'mean', cgl_l: 'first',
                 ccl_t: 'mean', ccl_w: 'mean', ccl_l: 'sum',
