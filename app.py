@@ -223,10 +223,8 @@ if GSHEET_URL:
 
             df['is_first_baby'] = ~df.duplicated(subset=[order_c, baby_c], keep='first')
             
-            # Deduplicate outputs & paint info for multiple rows of the same baby coil
+            # Deduplicate outputs for multiple rows of the same baby coil
             df[ccl_l] = df.apply(lambda r: r[ccl_l] if r['is_first_baby'] else 0, axis=1)
-            df[theo_paint_c] = df.apply(lambda r: r[theo_paint_c] if r['is_first_baby'] else 0, axis=1)
-            df[act_paint_c] = df.apply(lambda r: r[act_paint_c] if r['is_first_baby'] else 0, axis=1)
 
             df['base_coil'] = df[mother_c].astype(str).str[:-3]
             df['is_x00'] = df[mother_c].astype(str).str.endswith('X00', na=False)
@@ -265,8 +263,8 @@ if GSHEET_URL:
                 ccl_l: 'sum',
                 outer_cut: 'max',
                 inner_cut: 'max',
-                theo_paint_c: 'sum', # Aggregate Paint
-                act_paint_c: 'sum'   # Aggregate Paint
+                theo_paint_c: 'max', 
+                act_paint_c: 'max'   
             }).reset_index()
 
             # --- AGGREGATION LEVEL 2: ORDER SUMMARY ---
@@ -279,8 +277,8 @@ if GSHEET_URL:
                 ccl_t: 'mean',
                 cgl_t: 'mean',
                 cgl_w: 'mean',
-                theo_paint_c: 'sum', # Total Theo Paint per Order
-                act_paint_c: 'sum'   # Total Act Paint per Order
+                theo_paint_c: 'max', 
+                act_paint_c: 'max'   
             }).reset_index()
 
             summary = summary.rename(columns={mother_c: 'Qty (Coils)', cgl_l: 'In_m', ccl_l: 'Out_m'})
@@ -363,12 +361,8 @@ if GSHEET_URL:
             area_s = abs(disp[disp['Diff (m)'] < 0]['Diff Area (m²)'].sum())
             avg_yield = (disp['Theo Paint (kg)'].sum() / disp['Act Paint (kg)'].sum() * 100) if disp['Act Paint (kg)'].sum() > 0 else 0
 
-            st.markdown(f"""
-            **生產產出綜合分析:** * **總投入 (Total Input):** {t_in:,.0f} m  
-            * **總產出 (Total Output):** {t_out:,.0f} m  
-            * **不明面積差異 (Area Shortfall):** {area_s:,.2f} m²
-            * **Hiệu suất trung bình (Avg Yield):** {avg_yield:.2f}%
-            """)
+            # FIXED: Translated Vietnamese string into Traditional Chinese
+            st.markdown(f"**生產產出綜合分析:** \n* **總投入 (Total Input):** {t_in:,.0f} m  \n* **總產出 (Total Output):** {t_out:,.0f} m  \n* **不明面積差異 (Area Shortfall):** {area_s:,.2f} m² \n* **平均績效 (Avg Yield):** {avg_yield:.2f}%")
 
             st.subheader("5. Export Data")
 
