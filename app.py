@@ -155,7 +155,7 @@ h1, h2, h3 {{
 st.title("Length Variance Analysis: Total CGL vs CCL per Order")
 
 # ==========================================================
-# 2. DATA PROCESSING (ORIGINAL LOGIC + VARIANCE BREAKDOWN)
+# 2. DATA PROCESSING
 # ==========================================================
 GSHEET_URL = "https://docs.google.com/spreadsheets/d/1-kayrLVYwOO66Xxc7Vk7dbTNZ5Aph4MVd9DMTz6RJS0/edit?gid=0#gid=0"
 
@@ -250,18 +250,28 @@ if GSHEET_URL:
 
             # --- AGGREGATION LEVEL 1: MOTHER COIL ---
             s1 = df.groupby([order_c, mother_c]).agg({
-                cgl_t: 'mean', cgl_w: 'mean', cgl_l: 'first',
-                ccl_t: 'mean', ccl_w: 'mean', ccl_l: 'sum',
-                outer_cut: 'max', inner_cut: 'max',
+                cgl_t: 'mean',
+                cgl_w: 'mean',
+                cgl_l: 'first',
+                ccl_t: 'mean',
+                ccl_w: 'mean',
+                ccl_l: 'sum',
+                outer_cut: 'max',
+                inner_cut: 'max',
                 theo_paint_c: 'max', 
                 act_paint_c: 'max'   
             }).reset_index()
 
             # --- AGGREGATION LEVEL 2: ORDER SUMMARY ---
             summary = s1.groupby(order_c).agg({
-                mother_c: 'count', cgl_l: 'sum', ccl_l: 'sum',
-                outer_cut: 'sum', inner_cut: 'sum',
-                ccl_t: 'mean', cgl_t: 'mean', cgl_w: 'mean',
+                mother_c: 'count',
+                cgl_l: 'sum',
+                ccl_l: 'sum',
+                outer_cut: 'sum',
+                inner_cut: 'sum',
+                ccl_t: 'mean',
+                cgl_t: 'mean',
+                cgl_w: 'mean',
                 theo_paint_c: 'max', 
                 act_paint_c: 'max'   
             }).reset_index()
@@ -283,19 +293,12 @@ if GSHEET_URL:
                 diff = row['Diff']
                 
                 yield_pct = (theo_paint / act_paint) * 100
-                
-                # Định mức sơn (kg/m)
                 dinh_muc = (theo_paint / out_m) if out_m > 0 else 0
-                
-                # Tính % Hao hụt phế liệu
                 scrap_loss = (cut_scrap * dinh_muc) / act_paint * 100
-                
-                # Tính % Hao hụt do chiều dài ngắn (Chỉ tính khi Diff < 0)
                 len_loss = (abs(diff) * dinh_muc) / act_paint * 100 if diff < 0 else 0
                 
-                # Tính % Hao hụt nguyên nhân khác
                 other_loss = 100 - yield_pct - scrap_loss - len_loss
-                if other_loss < 0: other_loss = 0 # Xử lý sai số làm tròn
+                if other_loss < 0: other_loss = 0
                 
                 return pd.Series([yield_pct, scrap_loss, len_loss, other_loss])
 
@@ -304,8 +307,9 @@ if GSHEET_URL:
             # --- UI: ORDER SUMMARY ---
             st.subheader("1. Order Summary & Variance Breakdown")
 
-            disp = summary[[order_c, 'Qty (Coils)', cgl_w, 'In_m', 'Total_Cut', 'Out_m', 'Diff', theo_paint_c, act_paint_c, 'Yield (%)', 'Scrap Loss (%)', 'Len Var Loss (%)', 'Other Causes (%)']].copy()
-            disp.columns = ['Order ID', 'Qty (Coils)', 'Input Width', 'Input (m)', 'Cut Scrap (m)', 'Output (m)', 'Diff (m)', 'Theo Paint (kg)', 'Act Paint (kg)', 'Yield (%)', 'Scrap Loss (%)', 'Len Var Loss (%)', 'Other Causes (%)']
+            # FIXED: Added 'Area_m2' back to the list so 'Diff Area (m²)' can be generated without error
+            disp = summary[[order_c, 'Qty (Coils)', cgl_w, 'In_m', 'Total_Cut', 'Out_m', 'Diff', 'Area_m2', theo_paint_c, act_paint_c, 'Yield (%)', 'Scrap Loss (%)', 'Len Var Loss (%)', 'Other Causes (%)']].copy()
+            disp.columns = ['Order ID', 'Qty (Coils)', 'Input Width', 'Input (m)', 'Cut Scrap (m)', 'Output (m)', 'Diff (m)', 'Diff Area (m²)', 'Theo Paint (kg)', 'Act Paint (kg)', 'Yield (%)', 'Scrap Loss (%)', 'Len Var Loss (%)', 'Other Causes (%)']
             disp = disp.sort_values(by='Cut Scrap (m)', ascending=False).reset_index(drop=True)
             disp.insert(0, 'No.', range(1, len(disp) + 1))
 
@@ -316,6 +320,7 @@ if GSHEET_URL:
                     "Cut Scrap (m)": "{:,.0f}", 
                     "Output (m)": "{:,.0f}",
                     "Diff (m)": "{:,.0f}", 
+                    "Diff Area (m²)": "{:,.0f}",
                     "Theo Paint (kg)": "{:,.2f}",
                     "Act Paint (kg)": "{:,.2f}",
                     "Yield (%)": "{:.2f}%",
@@ -352,7 +357,6 @@ if GSHEET_URL:
             # --- UI: VISUAL INSIGHTS ---
             st.subheader("3. Visual Insights & Analysis")
 
-            # MỚI: Biểu đồ xếp chồng phân rã hao hụt
             fig_breakdown = px.bar(
                 disp, 
                 x='Order ID', 
@@ -361,21 +365,21 @@ if GSHEET_URL:
                 template=plotly_template,
                 labels={'value': 'Percentage (%)', 'variable': 'Category'},
                 color_discrete_map={
-                    'Yield (%)': '#10b981',        # Xanh lá (Hiệu suất)
-                    'Scrap Loss (%)': '#ef4444',   # Đỏ (Phế liệu)
-                    'Len Var Loss (%)': '#f59e0b', # Cam (Hụt mét)
-                    'Other Causes (%)': '#64748b'  # Xám (Khác)
+                    'Yield (%)': '#10b981',        
+                    'Scrap Loss (%)': '#ef4444',   
+                    'Len Var Loss (%)': '#f59e0b', 
+                    'Other Causes (%)': '#64748b'  
                 }
             )
             fig_breakdown.update_layout(barmode='stack')
             st.plotly_chart(fig_breakdown, use_container_width=True)
             st.info("**分析結論:** 塗料耗用差異分析 (Variance Breakdown)。顯示各訂單中，實際塗料耗用的結構比例。綠色為有效產出 (Yield)，紅色為切廢料損耗 (Scrap Loss)，橘色為長度短缺損耗 (Length Variance Loss)，灰色為未明原因或其他耗損 (Other Causes)。")
 
-            st.plotly_chart(px.bar(summary, x=order_c, y='Area_m2', color='Diff', color_continuous_scale='Tealgrn', title="Extra Area per Order", template=plotly_template), use_container_width=True)
+            st.plotly_chart(px.bar(disp, x='Order ID', y='Diff Area (m²)', color='Diff (m)', color_continuous_scale='Tealgrn', title="Extra Area per Order", template=plotly_template), use_container_width=True)
             st.info("**分析結論:** 監控各訂單的塗層面積偏差。偏離中心值的數據代表生產投入與產出不一致，建議優先核對該批次的生產日誌。")
 
-            st.plotly_chart(px.bar(summary.sort_values(by='outercutlength', ascending=False), x=order_c, y='outercutlength', 
-                           title="Total Cut Scrap per Order (Outer + Inner)", color='outercutlength', color_continuous_scale='Reds', template=plotly_template), use_container_width=True)
+            st.plotly_chart(px.bar(disp.sort_values(by='Cut Scrap (m)', ascending=False), x='Order ID', y='Cut Scrap (m)', 
+                           title="Total Cut Scrap per Order (Outer + Inner)", color='Cut Scrap (m)', color_continuous_scale='Reds', template=plotly_template), use_container_width=True)
             st.error("**分析結論:** 各訂單的剪切廢料總量。監控此數據有助於評估來料質量與生產初期的裁切損耗。若數值異常偏高，需檢查鋼捲頭尾品質狀況。")
 
             st.divider()
