@@ -198,7 +198,7 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
             disp['Qty (Coils)'] = disp['Qty (Coils)'].astype(int)
             disp.insert(0, 'No.', range(1, len(disp) + 1))
             
-            st.table(disp.head(20).set_index('No.').style.format({
+            st.table(disp).set_index('No.').style.format({
                 "Input (m)": "{:,.0f}", "Cut Scrap (m)": "{:,.0f}", "Output (m)": "{:,.0f}",
                 "Diff (m)": "{:,.0f}", "Thick Var": "{:.0f}", "Diff Area (m²)": "{:,.0f}"
             }))
