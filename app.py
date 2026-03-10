@@ -305,20 +305,26 @@ if GSHEET_URL:
             summary[['Yield (%)', 'Scrap Loss (%)', 'Len Var Loss (%)', 'Other Causes (%)']] = summary.apply(calc_variance_breakdown, axis=1)
 
             # --- UI: ORDER SUMMARY ---
-            st.subheader("1. Order Summary & Variance Breakdown")
+            col1, col2 = st.columns([8, 2])
+            with col1:
+                st.subheader("1. Order Summary & Variance Breakdown")
+            with col2:
+                # NEW: Dropdown to control number of rows displayed
+                row_limit_summary = st.selectbox("Show rows:", options=[20, 50, 100, "All"], index=0, key="summary_rows")
 
             disp = summary[[order_c, 'Qty (Coils)', cgl_w, 'In_m', 'Total_Cut', 'Out_m', 'Diff', 'Area_m2', theo_paint_c, act_paint_c, 'Yield (%)', 'Scrap Loss (%)', 'Len Var Loss (%)', 'Other Causes (%)']].copy()
             disp.columns = ['Order ID', 'Qty (Coils)', 'Input Width', 'Input (m)', 'Cut Scrap (m)', 'Output (m)', 'Diff (m)', 'Diff Area (m²)', 'Theo Paint (kg)', 'Act Paint (kg)', 'Yield (%)', 'Scrap Loss (%)', 'Len Var Loss (%)', 'Other Causes (%)']
             disp = disp.sort_values(by='Cut Scrap (m)', ascending=False).reset_index(drop=True)
             disp.insert(0, 'No.', range(1, len(disp) + 1))
 
-            # Dynamic height calculation to avoid empty space (35px per row + ~43px for header)
-            # Max height capped at 650px (shows roughly 15-20 rows before scrolling)
-            summary_height = min(len(disp) * 35 + 43, 650)
+            # Apply the selected row limit
+            if row_limit_summary == "All":
+                disp_view = disp
+            else:
+                disp_view = disp.head(row_limit_summary)
 
-            # Pass the full dataframe (no .head) so the scrollbar reflects the total data
             st.dataframe(
-                disp.set_index('No.').style.format({
+                disp_view.set_index('No.').style.format({
                     "Input Width": "{:,.0f}",
                     "Input (m)": "{:,.0f}", 
                     "Cut Scrap (m)": "{:,.0f}", 
@@ -332,15 +338,19 @@ if GSHEET_URL:
                     "Len Var Loss (%)": "{:.2f}%",
                     "Other Causes (%)": "{:.2f}%"
                 }), 
-                height=summary_height,
                 use_container_width=True
             )
 
             st.divider()
 
             # --- UI: PRODUCTION COIL DETAILS ---
-            st.subheader("2. Production Coil Details")
-            
+            col3, col4 = st.columns([8, 2])
+            with col3:
+                st.subheader("2. Production Coil Details")
+            with col4:
+                 # NEW: Dropdown to control number of rows displayed
+                row_limit_details = st.selectbox("Show rows:", options=[20, 50, 100, "All"], index=0, key="details_rows")
+
             sel_order = st.selectbox("🔍 Select Order ID:", options=df[order_c].unique(), index=None)
 
             if sel_order:
@@ -349,16 +359,18 @@ if GSHEET_URL:
                 det_f = det[[mother_c, baby_c, line_c, out_grade_c, next_proc_c, cgl_t, cgl_w, cgl_l, outer_cut, inner_cut, ccl_t, ccl_w, 'Var', ccl_l]].copy()
                 det_f.columns = ['Input ID', 'Output ID', 'Line', 'Grade', 'Next Proc', 'In Thick', 'In Width', 'In Len', 'Outer Cut', 'Inner Cut', 'Out Thick', 'Out Width', 'Thick Dev', 'Out Len']
 
-                # Dynamic height calculation for the details table
-                details_height = min(len(det_f) * 35 + 43, 650)
+                # Apply the selected row limit
+                if row_limit_details == "All":
+                    det_view = det_f
+                else:
+                    det_view = det_f.head(row_limit_details)
 
                 st.dataframe(
-                    det_f.style.format({
+                    det_view.style.format({
                         "In Thick": "{:.3f}", "In Width": "{:,.0f}", "In Len": "{:,.0f}",
                         "Outer Cut": "{:,.0f}", "Inner Cut": "{:,.0f}", "Out Thick": "{:.3f}", 
                         "Out Width": "{:,.0f}", "Thick Dev": "{:.3f}", "Out Len": "{:,.0f}"
                     }), 
-                    height=details_height,
                     use_container_width=True
                 )
 
@@ -381,3 +393,43 @@ if GSHEET_URL:
                     'Other Causes (%)': '#64748b'  
                 }
             )
+            fig_breakdown.update_layout(barmode='stack')
+            st.plotly_chart(fig_breakdown, use_container_width=True)
+            st.info("**分析結論:** 塗料耗用差異分析 (Variance Breakdown)。顯示各訂單中，實際塗料耗用的結構比例。綠色為有效產出 (Yield)，紅色為切廢料損耗 (Scrap Loss)，橘色為長度短缺損耗 (Length Variance Loss)，灰色為未明原因或其他耗損 (Other Causes)。")
+
+            st.plotly_chart(px.bar(disp, x='Order ID', y='Diff Area (m²)', color='Diff (m)', color_continuous_scale='Tealgrn', title="Extra Area per Order", template=plotly_template), use_container_width=True)
+            st.info("**分析結論:** 監控各訂單的塗層面積偏差。偏離中心值的數據代表生產投入與產出不一致，建議優先核對該批次的生產日誌。")
+
+            st.plotly_chart(px.bar(disp.sort_values(by='Cut Scrap (m)', ascending=False), x='Order ID', y='Cut Scrap (m)', 
+                           title="Total Cut Scrap per Order (Outer + Inner)", color='Cut Scrap (m)', color_continuous_scale='Reds', template=plotly_template), use_container_width=True)
+            st.error("**分析結論:** 各訂單的剪切廢料總量。監控此數據有助於評估來料質量與生產初期的裁切損耗。若數值異常偏高，需檢查鋼捲頭尾品質狀況。")
+
+            st.divider()
+
+            # --- UI: EXECUTIVE SUMMARY ---
+            st.subheader("4. Executive Summary")
+
+            t_in, t_out = disp['Input (m)'].sum(), disp['Output (m)'].sum()
+            area_s = abs(disp[disp['Diff (m)'] < 0]['Diff Area (m²)'].sum())
+            avg_yield = (disp['Theo Paint (kg)'].sum() / disp['Act Paint (kg)'].sum() * 100) if disp['Act Paint (kg)'].sum() > 0 else 0
+
+            st.markdown(f"**生產產出綜合分析:** \n* **總投入 (Total Input):** {t_in:,.0f} m  \n* **總產出 (Total Output):** {t_out:,.0f} m  \n* **不明面積差異 (Area Shortfall):** {area_s:,.2f} m² \n* **平均績效 (Avg Yield):** {avg_yield:.2f}%")
+
+            st.subheader("5. Export Data")
+
+            buf = io.BytesIO()
+
+            with pd.ExcelWriter(buf, engine='xlsxwriter') as writer:
+                disp.to_excel(writer, sheet_name='Summary', index=False)
+
+            st.download_button(
+                "📊 Download Excel Report",
+                data=buf.getvalue(),
+                file_name="Report.xlsx",
+                type="primary"
+            )
+
+        except Exception as e:
+            st.error(f"Logic Error: {e}")
+else:
+    st.info("Please insert the Google Sheet Link.")
