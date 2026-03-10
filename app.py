@@ -18,40 +18,16 @@ st.markdown("""
     <style>
     .stApp { background-color: #0f172a; }
     div[data-testid="stVerticalBlock"] > div:has(div.stPlotlyChart), 
-    div[data-testid="stVerticalBlock"] > div:has(div.stTable) {
+    div[data-testid="stVerticalBlock"] > div:has(div.stDataFrame) {
         background-color: #1e293b; padding: 20px; border-radius: 8px;
         margin-bottom: 20px; border: none;
     }
     h1, h2, h3 { color: #f8fafc; font-family: 'Segoe UI', sans-serif; font-weight: 700 !important; }
-    table { 
-        width: 100% !important; 
-        border-collapse: collapse !important; 
-        font-family: 'Segoe UI', sans-serif;
-        color: #e2e8f0;
-        border: 1px solid #334155 !important;
-    }
-    th { 
-        border: 1px solid #334155 !important; 
-        color: #38bdf8 !important; 
-        text-align: center !important; 
-        padding: 12px 8px !important;
-        font-size: 13px !important;
-        background-color: #0f172a !important;
-    }
-    td { 
-        text-align: center !important; 
-        padding: 10px 8px !important; 
-        border: 1px solid #334155 !important; 
-        font-size: 13px !important;
-    }
-    tr:hover { background-color: #334155; }
     .stSelectbox label { color: #f8fafc !important; }
     .stMarkdown p { color: #cbd5e1 !important; }
     @media print {
         header, .stSidebar, .stButton, [data-testid="stHeader"], .stDivider, .stTextInput { display: none !important; }
         .main .block-container { max-width: 100% !important; padding: 0.5cm !important; }
-        table { border: 1px solid #000 !important; color: #000 !important; }
-        th, td { border: 0.5pt solid #ccc !important; }
     }
     </style>
     """, unsafe_allow_html=True)
@@ -180,7 +156,7 @@ if GSHEET_URL:
             summary['Area_m2'] = (summary[cgl_w] / 1000) * summary['Diff']
 
             # ==========================================================
-            # UI: SCROLLABLE DATA TABLES & VISUALS
+            # UI: INTERACTIVE DATA GRIDS (WITH EXCEL-LIKE SCROLLBARS)
             # ==========================================================
 
             # --- 1. ORDER SUMMARY ---
@@ -199,12 +175,16 @@ if GSHEET_URL:
             disp['Qty (Coils)'] = disp['Qty (Coils)'].astype(int)
             disp.insert(0, 'No.', range(1, len(disp) + 1))
             
-            # Wrap table in a scrollable container (displays ~20 items perfectly at a glance)
-            with st.container(height=800):
-                st.table(disp.set_index('No.').style.format({
+            # Using st.dataframe for native horizontal & vertical scrollbars
+            # Height 700px naturally displays roughly 20 items at a time
+            st.dataframe(
+                disp.set_index('No.').style.format({
                     "Input (m)": "{:,.0f}", "Cut Scrap (m)": "{:,.0f}", "Output (m)": "{:,.0f}",
                     "Diff (m)": "{:,.0f}", "Thick Var": "{:.0f}", "Diff Area (m²)": "{:,.0f}"
-                }))
+                }),
+                height=700, 
+                use_container_width=True
+            )
 
            # --- 2. DATA INSPECTION ---
             st.divider()
@@ -244,9 +224,9 @@ if GSHEET_URL:
                     'Output Length (m)'
                 ]
                 
-                # Scrollable container for inspection data
-                with st.container(height=800):
-                    st.table(det_f.style.format({
+                # Interactive data grid for inspection details, formatted to integer only
+                st.dataframe(
+                    det_f.style.format({
                         "Input Thick (mm)": "{:.0f}", 
                         "Input Width (mm)": "{:.0f}", 
                         "Input Length (m)": "{:.0f}",
@@ -256,7 +236,10 @@ if GSHEET_URL:
                         "Output Width (mm)": "{:.0f}",
                         "Thick Deviation (mm)": "{:.0f}", 
                         "Output Length (m)": "{:.0f}"
-                    }))
+                    }),
+                    height=700,
+                    use_container_width=True
+                )
                 
             # --- 3. VISUAL INSIGHTS & ANALYSIS ---
             st.divider()
