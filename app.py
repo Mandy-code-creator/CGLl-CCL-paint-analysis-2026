@@ -85,7 +85,7 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
         cgl_t, cgl_w, cgl_l = "镀锌實測厚度", "镀锌測寬度", "镀锌測長度"
         ccl_t, ccl_w, ccl_l = "實測厚度", "實測寬度", "實測長度"
 
-        # Tên cột tiếng Anh sau khi đã bị ép về chữ thường và xóa khoảng trắng (ĐÃ SỬA CHÍNH TẢ)
+        # Tên cột tiếng Anh sau khi đã bị ép về chữ thường và xóa khoảng trắng
         outer_cut = "outercutlength"
         inner_cut = "innercutlength"
 
@@ -186,14 +186,24 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
             st.divider()
             st.subheader("3. Visual Insights & Analysis")
             
+            # Biểu đồ 1: Area Diff
             f1 = px.bar(disp, x='Order ID', y='Diff Area (m²)', color='Diff (m)', 
                         color_continuous_scale='RdBu', title="Extra Area per Order")
             st.plotly_chart(f1, use_container_width=True)
             st.info("**分析結論:** 監控各訂單的塗層面積偏差。偏離中心值的數據代表生產投入與產出不一致，建議優先核對該批次的生產日誌。")
 
+            # Biểu đồ 2: Production Variance
             f2 = px.histogram(disp, x='Diff (m)', nbins=15, title="Production Variance Distribution")
             st.plotly_chart(f2, use_container_width=True)
             st.warning("**分析結論:** 數據分布反映生產穩定性。離群值標示該訂單存在異常長度變化，需確認是物理延展、裁切損耗或是計量誤差。")
+
+            # Biểu đồ 3 (MỚI THÊM): Cut Scrap
+            f3 = px.bar(disp, x='Order ID', y='Cut Scrap (m)', 
+                        title="Total Cut Scrap per Order (Outer + Inner)",
+                        color='Cut Scrap (m)', color_continuous_scale='Reds')
+            f3.update_layout(yaxis_title="Scrap Length (m)")
+            st.plotly_chart(f3, use_container_width=True)
+            st.error("**分析結論:** 各訂單的剪切廢料總量。監控此數據有助於評估來料質量與生產初期的裁切損耗。若數值異常偏高，需檢查鋼捲頭尾品質狀況。")
 
             # --- 4. EXECUTIVE SUMMARY ---
             st.divider()
