@@ -93,30 +93,32 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
                     df[col] = 0
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
-            # --- FIX: XỬ LÝ LỖI CUỘN XẺ (P00, M00...) ---
-            # 1. Ép tất cả các cột kích thước về dạng số (những ô trống sẽ tự biến thành NaN)
+            # 1. Ép tất cả các cột kích thước về dạng số để xử lý tính toán
             for col in [cgl_t, cgl_w, cgl_l, ccl_t, ccl_w, ccl_l]:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
                 
-            # 2. Sao chép độ dày & độ rộng CGL từ cuộn mẹ gốc cho các cuộn bị xẻ (cùng đơn hàng)
+            # 2. Sao chép Độ dày (Thick) & Độ rộng (Width) từ cuộn mẹ gốc (X00) cho các cuộn xẻ (M00, P00)
             df[cgl_t] = df.groupby(order_c)[cgl_t].transform(lambda x: x.ffill().bfill()).fillna(0)
             df[cgl_w] = df.groupby(order_c)[cgl_w].transform(lambda x: x.ffill().bfill()).fillna(0)
             
-            # 3. Điền chiều dài đầu vào CGL bằng 0 cho các ô trống để tránh nhân đôi dữ liệu gốc
+            # 3. CHỐNG DOUBLE COUNT: Các cuộn M00, P00 bị rỗng chiều dài CGL sẽ tự động bằng 0. 
+            # Chỉ có cuộn mẹ gốc X00 là mang chiều dài Input thực tế.
             df[cgl_l] = df[cgl_l].fillna(0)
-            
-            # 4. Tránh lỗi hiển thị đối với các ô CCL vô tình bị trống
+
+            # 4. Tránh lỗi mất dữ liệu với các ô vô tình bị trống ở khâu CCL
             df[ccl_t] = df[ccl_t].fillna(0)
             df[ccl_w] = df[ccl_w].fillna(0)
             df[ccl_l] = df[ccl_l].fillna(0)
-            # ---------------------------------------------
 
+            # --- GOM NHÓM THEO CUỘN MẸ (MÔ PHỎNG HÀM COUNTIF CỦA BẠN) ---
+            # Hàm 'first' cho cgl_l chỉ lấy số lần xuất hiện đầu tiên, các dòng lặp lại của cuộn con sẽ bị bỏ qua
             s1 = df.groupby([order_c, mother_c]).agg({
                 cgl_t: 'mean', cgl_w: 'mean', cgl_l: 'first',
                 ccl_t: 'mean', ccl_w: 'mean', ccl_l: 'sum',
                 outer_cut: 'max', inner_cut: 'max' 
             }).reset_index()
 
+            # TỔNG HỢP TOÀN BỘ ĐƠN HÀNG
             summary = s1.groupby(order_c).agg({
                 mother_c: 'count', cgl_l: 'sum', ccl_l: 'sum', 
                 outer_cut: 'sum', inner_cut: 'sum',
@@ -125,6 +127,7 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
 
             summary = summary.rename(columns={mother_c: 'Qty (Coils)', cgl_l: 'In_m', ccl_l: 'Out_m'})
             
+            # TÍNH TOÁN HAO HỤT
             summary['Total_Cut'] = summary[outer_cut] + summary[inner_cut]
             summary['Diff'] = summary['Out_m'] - (summary['In_m'] - summary['Total_Cut'])
             summary['Thick_Var'] = summary[ccl_t] - summary[cgl_t]
@@ -136,7 +139,7 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
             st.markdown("""
             > **💡 術語說明 (Technical Note):** > **Diff Area (m²)** = **塗層面積差異** (Coating Area Variance)  
             > * **正值 (+):** 鋼帶延展 (Elongation)，導致塗漆消耗量增加。  
-            > * **負值 (-):** 長度短缺 (Shortage)，可能源於剪切廢料 (Scrap) 或感測器誤差。
+            > * **負值 (-):** 長度短缺 (Shortage)，已扣除頭尾廢料 (Scrap Deducted)，可能源於感測器誤差。
             """)
 
             disp = summary[[order_c, 'Qty (Coils)', 'In_m', 'Total_Cut', 'Out_m', 'Diff', 'Thick_Var', 'Area_m2']].copy()
