@@ -1,3 +1,4 @@
+```python
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -9,146 +10,52 @@ import re
 st.set_page_config(page_title="Length Variance Analysis: Total CGL vs CCL per Order", layout="wide")
 
 # ==========================================================
-# UI IMPROVEMENT (ONLY VISUAL - NO LOGIC CHANGE)
+# UI STYLE (VISUAL ONLY)
 # ==========================================================
 st.markdown("""
 <style>
 
 html, body, [class*="css"]  {
-    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    font-family: 'Segoe UI', system-ui, sans-serif;
 }
 
 .block-container{
     padding-top:2rem;
-    padding-bottom:2rem;
 }
 
-/* Card style */
-div[data-testid="stVerticalBlock"] > div:has(div.stDataFrame),
-div[data-testid="stVerticalBlock"] > div:has(div.stPlotlyChart){
-    border-radius:12px;
-    box-shadow:0 6px 25px rgba(0,0,0,0.08);
-    padding:22px;
-}
-
-/* Title */
-h1{
-    font-size:36px;
-    letter-spacing:0.3px;
-}
-
-/* Sub titles */
-h2,h3{
-    margin-top:10px;
-    margin-bottom:10px;
-}
-
-/* Divider */
-hr{
-    border:1px solid rgba(120,120,120,0.2);
-}
-
-/* Table header */
 thead tr th{
     font-weight:600 !important;
 }
 
-/* Table hover */
 tbody tr:hover{
     background-color:rgba(120,120,120,0.08);
 }
 
-/* Selectbox */
-div[data-baseweb="select"]{
-    border-radius:8px;
-}
-
-/* Buttons */
-button[kind="primary"]{
-    border-radius:8px;
-    font-weight:600;
-}
-
-/* Alerts */
 div[data-testid="stAlert"]{
     border-radius:10px;
 }
 
-/* Charts */
 .js-plotly-plot{
     border-radius:10px;
 }
 
-/* Scrollbar */
-::-webkit-scrollbar{
-    width:8px;
-}
-::-webkit-scrollbar-thumb{
-    background:#94a3b8;
-    border-radius:10px;
-}
-
 </style>
 """, unsafe_allow_html=True)
 
-
 # ==========================================================
-# 1. THEME SELECTION
+# THEME SELECTION
 # ==========================================================
 theme_choice = st.radio("🎨 Select App Theme:", ["Light Mode (Standard)", "Dark Mode (Professional)"], horizontal=True)
 
 if theme_choice == "Dark Mode (Professional)":
-    bg_color = "#0f172a"
-    card_bg = "#1e293b"
-    text_color = "#f8fafc"
-    sub_text = "#cbd5e1"
-    table_border = "#334155"
-    header_bg = "#0f172a"
     plotly_template = "plotly_dark"
-    accent_color = "#38bdf8"
 else:
-    bg_color = "#ffffff"
-    card_bg = "#ffffff"
-    text_color = "#1e3a8a"
-    sub_text = "#334155"
-    table_border = "#e2e8f0"
-    header_bg = "#f8fafc"
     plotly_template = "plotly_white"
-    accent_color = "#1e3a8a"
-
-st.markdown(f"""
-<style>
-.stApp {{ background-color: {bg_color}; }}
-
-div[data-testid="stVerticalBlock"] > div:has(div.stPlotlyChart), 
-div[data-testid="stVerticalBlock"] > div:has(div.stDataFrame) {{
-    background-color: {card_bg};
-    padding: 20px;
-    border-radius: 8px;
-    margin-bottom: 20px;
-    border: {"1px solid " + table_border if theme_choice == "Light Mode (Standard)" else "none"};
-}}
-
-h1, h2, h3 {{
-    color: {text_color};
-    font-family: 'Segoe UI', sans-serif;
-    font-weight: 700 !important;
-}}
-
-.stMarkdown p {{ color: {sub_text} !important; }}
-
-.stSelectbox label, .stRadio label {{
-    color: {text_color} !important;
-    font-weight: bold;
-}}
-
-</style>
-""", unsafe_allow_html=True)
 
 st.title("Length Variance Analysis: Total CGL vs CCL per Order")
 
 # ==========================================================
-# 2. DATA PROCESSING (ORIGINAL LOGIC)
+# DATA SOURCE
 # ==========================================================
 GSHEET_URL = "https://docs.google.com/spreadsheets/d/1-kayrLVYwOO66Xxc7Vk7dbTNZ5Aph4MVd9DMTz6RJS0/edit?gid=0#gid=0"
 
@@ -200,8 +107,8 @@ if GSHEET_URL:
         cgl_l = get_col("镀锌測長度", ["镀锌測長度", "镀锌實測長度", "镀锌长度", "鍍鋅測長度"])
         ccl_l = get_col("實測長度", ["實測長度", "实测长度"])
 
-        cgl_w = get_col("镀锌測寬度", ["镀锌測寬度", "镀锌測寬", "镀锌宽度", "鍍鋅測寬度", "镀锌实测宽度"])
-        cgl_t = get_col("镀锌實測厚度", ["镀锌實測厚度", "镀锌測厚", "镀锌厚度", "鍍鋅實測厚度"])
+        cgl_w = get_col("镀锌測寬度", ["镀锌測寬度", "镀锌測寬", "镀锌宽度", "鍍鋅測寬度"])
+        cgl_t = get_col("镀锌實測厚度", ["镀锌實測厚度", "镀锌測厚", "镀锌厚度"])
 
         ccl_w = get_col("實測寬度", ["實測寬度", "实测宽度"])
         ccl_t = get_col("實測厚度", ["實測厚度", "实测厚度"])
@@ -228,6 +135,10 @@ if GSHEET_URL:
                     df[col] = 0
 
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+
+            # ==========================================================
+            # ROUTING LOGIC (UNCHANGED)
+            # ==========================================================
 
             df['is_first_baby'] = ~df.duplicated(subset=[order_c, baby_c], keep='first')
 
@@ -308,6 +219,10 @@ if GSHEET_URL:
 
             summary['Area_m2'] = (summary[cgl_w] / 1000) * summary['Diff']
 
+            # ==========================================================
+            # DISPLAY TABLE
+            # ==========================================================
+
             st.subheader("1. Order Summary")
 
             disp = summary[[order_c, 'Qty (Coils)', cgl_w, 'In_m', 'Total_Cut', 'Out_m', 'Diff', 'Thick_Var', 'Area_m2']].copy()
@@ -319,6 +234,24 @@ if GSHEET_URL:
             disp.insert(0, 'No.', range(1, len(disp) + 1))
 
             st.dataframe(disp.set_index('No.'), height=500, use_container_width=True)
+
+            # ==========================================================
+            # KPI DASHBOARD
+            # ==========================================================
+
+            st.divider()
+
+            k1,k2,k3,k4,k5 = st.columns(5)
+
+            k1.metric("Orders", f"{disp.shape[0]}")
+            k2.metric("Total Input", f"{disp['Input (m)'].sum():,.0f} m")
+            k3.metric("Total Output", f"{disp['Output (m)'].sum():,.0f} m")
+            k4.metric("Total Scrap", f"{disp['Cut Scrap (m)'].sum():,.0f} m")
+            k5.metric("Area Diff", f"{disp['Diff Area (m²)'].sum():,.0f} m²")
+
+            # ==========================================================
+            # COIL DETAILS
+            # ==========================================================
 
             st.divider()
 
@@ -338,34 +271,43 @@ if GSHEET_URL:
 
                 st.dataframe(det_f, height=500, use_container_width=True)
 
+            # ==========================================================
+            # VISUAL INSIGHTS
+            # ==========================================================
+
             st.divider()
 
             st.subheader("3. Visual Insights & Analysis")
 
-            st.plotly_chart(px.bar(disp, x='Order ID', y='Diff Area (m²)', color='Diff (m)', color_continuous_scale='Blues_r', template=plotly_template), use_container_width=True)
+            st.plotly_chart(px.bar(disp, x='Order ID', y='Diff Area (m²)', color='Diff (m)', template=plotly_template), use_container_width=True)
 
-            st.info("**分析結論:** 監控各訂單的塗層面積偏差。")
+            st.plotly_chart(px.bar(disp.sort_values(by='Cut Scrap (m)', ascending=False), x='Order ID', y='Cut Scrap (m)', template=plotly_template), use_container_width=True)
 
-            st.plotly_chart(px.bar(disp.sort_values(by='Cut Scrap (m)', ascending=False), x='Order ID', y='Cut Scrap (m)', color='Cut Scrap (m)', color_continuous_scale='Reds', template=plotly_template), use_container_width=True)
-
-            st.error("**分析結論:** 各訂單的剪切廢料總量。")
+            # ==========================================================
+            # EXECUTIVE SUMMARY
+            # ==========================================================
 
             st.divider()
 
             st.subheader("4. Executive Summary")
 
             t_in = disp['Input (m)'].sum()
+
             t_out = disp['Output (m)'].sum()
 
             area_s = abs(disp[disp['Diff (m)'] < 0]['Diff Area (m²)'].sum())
 
             st.markdown(f"""
-**生產產出綜合分析:**
+**Production Summary**
 
-• **總投入:** {t_in:,.0f} m  
-• **總產出:** {t_out:,.0f} m  
-• **不明面積差異:** {area_s:,.2f} m²
+• **Total Input:** {t_in:,.0f} m  
+• **Total Output:** {t_out:,.0f} m  
+• **Area Shortfall:** {area_s:,.2f} m²
 """)
+
+            # ==========================================================
+            # EXPORT
+            # ==========================================================
 
             st.subheader("5. Export Data")
 
@@ -383,3 +325,4 @@ if GSHEET_URL:
 
         except Exception as e:
             st.error(f"Logic Error: {e}")
+```
