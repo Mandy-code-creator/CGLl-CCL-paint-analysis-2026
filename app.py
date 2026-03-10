@@ -5,10 +5,10 @@ import io
 import streamlit.components.v1 as components
 
 # --- PAGE CONFIGURATION ---
-st.set_page_config(page_title="Length Variance Analysis: Total CGL vs CCL per Order", layout="wide")
+st.set_page_config(page_title="Length Variance Analysis", layout="wide")
 
 # ==========================================================
-# 1. AUTO-SYNC CONFIGURATION (INSERT YOUR LINK HERE)
+# 1. AUTO-SYNC CONFIGURATION
 # ==========================================================
 GSHEET_URL = "https://docs.google.com/spreadsheets/d/1-kayrLVYwOO66Xxc7Vk7dbTNZ5Aph4MVd9DMTz6RJS0/edit?gid=0#gid=0"
 
@@ -42,7 +42,6 @@ def load_auto_data(url):
                 gid = url.split("gid=")[1].split("&")[0]
             csv_url = f"{base_url}/export?format=csv&gid={gid}"
             df = pd.read_csv(csv_url)
-            # Giữ nguyên tên gốc để hiển thị nhưng tạo bản copy chuẩn hóa
             return df
         return None
     except Exception as e:
@@ -57,56 +56,70 @@ if GSHEET_URL:
     
     if df_raw is not None:
         df = df_raw.copy()
-        # Chuẩn hóa tên cột để tìm kiếm (xóa khoảng trắng, lowercase)
-        cols = {c: c.strip().lower().replace(" ", "") for c in df.columns}
+        # Chuẩn hóa tên cột để tìm kiếm tự động
+        raw_cols = {c: str(c).strip().lower().replace(" ", "") for c in df.columns}
         
-        # Hàm tìm cột thông minh dựa trên từ khóa
-        def find_col(keywords, default_name):
-            for original, normalized in cols.items():
-                if all(k in normalized for k in keywords):
-                    return original
-            return default_name
+        def find_col(keywords, default):
+            for orig, norm in raw_cols.items():
+                if all(k in norm for k in keywords): return orig
+            return default
 
-        # Định nghĩa các cột chính bằng từ khóa để tránh lỗi 'Logic Error'
+        # Tự động nhận diện cột (Tránh lỗi Logic Error)
         order_c = find_col(["订单", "号码"], "訂單號碼")
         mother_c = find_col(["投入", "钢卷"], "投入鋼捲號碼")
-        cgl_l = find_col(["镀锌", "长度"], "镀锌實測長度")
-        ccl_l = find_col(["实测", "长度"], "實測長度")
-        cgl_t = find_col(["镀锌", "厚度"], "镀锌實測厚度")
-        ccl_t = find_col(["实测", "厚度"], "實測厚度")
-        cgl_w = find_col(["镀锌", "宽度"], "镀锌測寬度")
+        baby_c   = find_col(["产出", "钢卷"], "產出鋼捲號碼")
+        cgl_l    = find_col(["镀锌", "长度"], "镀锌實測長度")
+        ccl_l    = find_col(["实测", "长度"], "實測長度")
+        cgl_t    = find_col(["镀锌", "厚度"], "镀锌實測厚度")
+        cgl_w    = find_col(["镀锌", "宽度"], "镀锌測寬度")
         outer_cut = find_col(["outer", "cut"], "outercutlength")
         inner_cut = find_col(["inner", "cut"], "innercutlength")
 
         try:
-            # 1. Chuyển đổi số liệu
-            for col in [cgl_l, ccl_l, outer_cut, inner_cut, cgl_t, cgl_w, ccl_t]:
-                if col in df.columns:
-                    df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+            # Ép kiểu dữ liệu số
+            numeric_cols = [cgl_l, ccl_l, outer_cut, inner_cut, cgl_t, cgl_w]
+            for c in numeric_cols:
+                if c in df.columns:
+                    df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
                 else:
-                    df[col] = 0
+                    df[c] = 0
 
-            # 2. XỬ LÝ GỐC PHÔI (ROOT ID) - Chống cộng dồn
+            # --- THUẬT TOÁN LOGIC TỔNG HỢP ---
+            
+            # 1. Tách "Huyết thống" (Root ID) - Cắt bỏ 3 ký tự cuối
+            # Ví dụ: 61A983A00 và 61A983AP0 -> chung gốc 61A983
             df['root_id'] = df[mother_c].astype(str).str[:-3]
             
-            # 3. LOGIC TÍNH INPUT THÔNG MINH
-            df['has_cgl_val'] = df[cgl_l] > 0
-            root_has_cgl = df.groupby([order_c, 'root_id'])['has_cgl_val'].transform('any')
-            df['is_first_of_root'] = ~df.duplicated(subset=[order_c, 'root_id'])
-            df['sum_ccl_by_mother'] = df.groupby([order_c, mother_c])[ccl_l].transform('sum')
-            df['root_has_cgl_any'] = root_has_cgl
+            # 2. Kiểm tra xem nhóm root_id này có cuộn mẹ gốc (X00/A00) trong đơn hàng không
+            df['is_main_coil'] = df[mother_c].astype(str).str.contains('X00|A00', case=False)
+            df['has_main_in_order'] = df.groupby([order_c, 'root_id'])['is_main_coil'].transform('any')
+            
+            # 3. Loại bỏ cộng dồn trên cùng một Mother ID thực tế
+            df['is_first_mother'] = ~df.duplicated(subset=[order_c, mother_c])
+            df['input_step1'] = df.apply(lambda r: r[cgl_l] if r['is_first_mother'] else 0, axis=1)
 
-            def resolve_input_length(row):
-                if row['is_first_of_root']:
-                    if row[cgl_l] > 0:
-                        return row[cgl_l]
-                    elif not row['root_has_cgl_any']:
-                        return row['sum_ccl_by_mother'] # Trường hợp mồ mồ côi trống số
-                return 0
+            # 4. Quyết định Input cuối cùng (final_input)
+            def final_logic(row):
+                # Nếu có số CGL thực tế > 0
+                if row['input_step1'] > 0:
+                    # Nếu là cuộn con nhưng đơn hàng đã có cuộn mẹ (X00/A00) gánh team -> trả về 0
+                    if not row['is_main_coil'] and row['has_main_in_order']:
+                        return 0
+                    return row['input_step1']
+                # Nếu trống số CGL
+                else:
+                    # Nếu nhóm này "mồ côi" hoàn toàn (không có X00/A00)
+                    if not row['has_main_in_order']:
+                        # Lấy số CCL đắp qua cho dòng đầu tiên xuất hiện
+                        return row[ccl_l] if row['is_first_mother'] else 0
+                    return 0
 
-            df['final_input'] = df.apply(resolve_input_length, axis=1)
+            df['final_input'] = df.apply(final_logic, axis=1)
 
-            # --- GOM NHÓM KẾT QUẢ ---
+            # --- SAO CHÉP THÔNG SỐ RỘNG/DÀY ---
+            df[cgl_w] = df.groupby([order_c, 'root_id'])[cgl_w].transform(lambda x: x.replace(0, pd.NA).ffill().bfill()).fillna(0)
+
+            # --- TỔNG HỢP ---
             summary = df.groupby(order_c).agg({
                 mother_c: 'count',
                 'final_input': 'sum',
@@ -121,20 +134,27 @@ if GSHEET_URL:
             summary['Diff'] = summary['Out_m'] - (summary['In_m'] - summary['Total_Cut'])
             summary['Diff_Area'] = (summary[cgl_w] / 1000) * summary['Diff']
 
-            # --- HIỂN THỊ ---
-            st.subheader("1. Order Summary")
+            # --- GIAO DIỆN ---
+            st.subheader("1. Order Summary (Logic Đa Tầng Hoàn Chỉnh)")
             disp = summary[[order_c, 'Qty', 'In_m', 'Total_Cut', 'Out_m', 'Diff', 'Diff_Area']].copy()
             disp.columns = ['Order ID', 'Coils', 'Input (m)', 'Cut Scrap (m)', 'Output (m)', 'Diff (m)', 'Diff Area (m²)']
             
-            st.table(disp.style.format({
+            st.table(disp.sort_values('Diff (m)').style.format({
                 "Input (m)": "{:,.0f}", "Output (m)": "{:,.0f}", "Diff (m)": "{:.2f}", "Diff Area (m²)": "{:.2f}"
             }))
 
             st.divider()
-            st.subheader("2. Visual Insights")
+            st.subheader("2. Kiểm tra chi tiết để đối chiếu")
+            sel_order = st.selectbox("Chọn Order ID để xem chi tiết từng cuộn:", options=df[order_c].unique())
+            if sel_order:
+                check = df[df[order_c] == sel_order][[mother_c, baby_c, cgl_l, "final_input", ccl_l]]
+                st.dataframe(check)
+
+            # Biểu đồ phân tích
+            st.divider()
             f1 = px.bar(disp, x='Order ID', y='Diff Area (m²)', color='Diff (m)', 
                         color_continuous_scale='RdBu', title="Extra Area per Order")
             st.plotly_chart(f1, use_container_width=True)
 
         except Exception as e:
-            st.error(f"Logic Error: {e}. Vui lòng kiểm tra lại tiêu đề các cột trên Google Sheet.")
+            st.error(f"Error: {e}")
