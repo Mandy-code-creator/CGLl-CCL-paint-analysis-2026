@@ -66,7 +66,8 @@ def load_auto_data(url):
                 gid = url.split("gid=")[1].split("&")[0]
             csv_url = f"{base_url}/export?format=csv&gid={gid}"
             df = pd.read_csv(csv_url)
-            df.columns = df.columns.astype(str).str.strip().str.replace(r'\s+', '', regex=True)
+            # Ép tất cả tên cột về chữ thường, xóa khoảng trắng để chống lỗi gõ sai/in hoa
+            df.columns = df.columns.astype(str).str.strip().str.lower().str.replace(r'\s+', '', regex=True)
             return df
         return None
     except Exception as e:
@@ -84,34 +85,36 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
         cgl_t, cgl_w, cgl_l = "镀锌實測厚度", "镀锌測寬度", "镀锌測長度"
         ccl_t, ccl_w, ccl_l = "實測厚度", "實測寬度", "實測長度"
 
+        # Tên cột tiếng Anh sau khi đã bị ép về chữ thường và xóa khoảng trắng (ĐÃ SỬA CHÍNH TẢ)
         outer_cut = "outercutlength"
-        inter_cut = "intercutlenght"
+        inner_cut = "innercutlength"
 
         try:
-            # Xử lý dữ liệu rỗng
-            for col in [outer_cut, inter_cut]:
+            # Kiểm tra xem cột đã tồn tại chưa, nếu chưa mới gán 0
+            for col in [outer_cut, inner_cut]:
                 if col not in df.columns:
+                    st.warning(f"Cảnh báo: Không tìm thấy cột '{col}' trong dữ liệu. Hãy kiểm tra lại tên cột trên Google Sheet.")
                     df[col] = 0
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
-            # --- SỬA LOGIC Ở ĐÂY ---
-            # Dùng 'first' cho outer_cut và inter_cut để không bị nhân lên theo số lượng cuộn con
+            # Gom nhóm theo Cuộn Mẹ (Dùng 'max' để quét được số cắt phế liệu nhập ở bất kỳ dòng nào)
             s1 = df.groupby([order_c, mother_c]).agg({
                 cgl_t: 'mean', cgl_w: 'mean', cgl_l: 'first',
                 ccl_t: 'mean', ccl_w: 'mean', ccl_l: 'sum',
-                outer_cut: 'first', inter_cut: 'first' 
+                outer_cut: 'max', inner_cut: 'max' 
             }).reset_index()
 
-            # Ở mức Order, dùng 'sum' để cộng tổng các cuộn mẹ khác nhau
+            # Tổng hợp theo đơn hàng (Dùng 'sum' vì mỗi cuộn mẹ có số cắt phế liệu riêng biệt)
             summary = s1.groupby(order_c).agg({
                 mother_c: 'count', cgl_l: 'sum', ccl_l: 'sum', 
-                outer_cut: 'sum', inter_cut: 'sum',
+                outer_cut: 'sum', inner_cut: 'sum',
                 ccl_t: 'mean', cgl_t: 'mean', cgl_w: 'mean'
             }).reset_index()
 
             summary = summary.rename(columns={mother_c: 'Qty', cgl_l: 'In_m', ccl_l: 'Out_m'})
             
-            summary['Total_Cut'] = summary[outer_cut] + summary[inter_cut]
+            # Công thức tính lại Diff
+            summary['Total_Cut'] = summary[outer_cut] + summary[inner_cut]
             summary['Diff'] = summary['Out_m'] - (summary['In_m'] - summary['Total_Cut'])
             summary['Thick_Var'] = summary[ccl_t] - summary[cgl_t]
             summary['Area_m2'] = (summary[cgl_w] / 1000) * summary['Diff']
@@ -149,7 +152,7 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
                 det_f = det[[
                     mother_c, baby_c, 
                     cgl_t, cgl_w, cgl_l, 
-                    outer_cut, inter_cut,
+                    outer_cut, inner_cut,
                     ccl_t, ccl_w, 'Var', ccl_l 
                 ]].copy()
                 
@@ -160,7 +163,7 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
                     'Input Width (mm)', 
                     'Input Length (m)', 
                     'Outer Cut (m)',
-                    'Inter Cut (m)',
+                    'Inner Cut (m)',
                     'Output Thick (mm)', 
                     'Output Width (mm)', 
                     'Thick Deviation (mm)', 
@@ -172,12 +175,13 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
                     "Input Width (mm)": "{:,.0f}", 
                     "Input Length (m)": "{:,.0f}",
                     "Outer Cut (m)": "{:,.0f}",
-                    "Inter Cut (m)": "{:,.0f}",
+                    "Inner Cut (m)": "{:,.0f}",
                     "Output Thick (mm)": "{:.3f}", 
                     "Output Width (mm)": "{:,.0f}",
                     "Thick Deviation (mm)": "{:.3f}", 
                     "Output Length (m)": "{:,.0f}"
                 }))
+                
             # --- 3. VISUAL INSIGHTS (CONCLUSIONS IN CHINESE) ---
             st.divider()
             st.subheader("3. Visual Insights & Analysis")
