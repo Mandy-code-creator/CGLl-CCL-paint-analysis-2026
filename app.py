@@ -84,24 +84,25 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
         cgl_t, cgl_w, cgl_l = "镀锌實測厚度", "镀锌測寬度", "镀锌測長度"
         ccl_t, ccl_w, ccl_l = "實測厚度", "實測寬度", "實測長度"
 
-        # Tên 2 cột mới sau khi xóa khoảng trắng
         outer_cut = "outercutlength"
         inter_cut = "intercutlenght"
 
         try:
-            # Đảm bảo 2 cột tồn tại và là số (nếu Google Sheet bị trống)
+            # Xử lý dữ liệu rỗng
             for col in [outer_cut, inter_cut]:
                 if col not in df.columns:
                     df[col] = 0
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
-            # Aggregate Logic
+            # --- SỬA LOGIC Ở ĐÂY ---
+            # Dùng 'first' cho outer_cut và inter_cut để không bị nhân lên theo số lượng cuộn con
             s1 = df.groupby([order_c, mother_c]).agg({
                 cgl_t: 'mean', cgl_w: 'mean', cgl_l: 'first',
                 ccl_t: 'mean', ccl_w: 'mean', ccl_l: 'sum',
-                outer_cut: 'sum', inter_cut: 'sum'
+                outer_cut: 'first', inter_cut: 'first' 
             }).reset_index()
 
+            # Ở mức Order, dùng 'sum' để cộng tổng các cuộn mẹ khác nhau
             summary = s1.groupby(order_c).agg({
                 mother_c: 'count', cgl_l: 'sum', ccl_l: 'sum', 
                 outer_cut: 'sum', inter_cut: 'sum',
@@ -110,7 +111,6 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
 
             summary = summary.rename(columns={mother_c: 'Qty', cgl_l: 'In_m', ccl_l: 'Out_m'})
             
-            # Giữ nguyên logic tính toán của bạn, chỉ bổ sung trừ hao phần đã cắt
             summary['Total_Cut'] = summary[outer_cut] + summary[inter_cut]
             summary['Diff'] = summary['Out_m'] - (summary['In_m'] - summary['Total_Cut'])
             summary['Thick_Var'] = summary[ccl_t] - summary[cgl_t]
@@ -119,14 +119,12 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
             # --- 1. ORDER SUMMARY ---
             st.subheader("1. Order Summary")
             
-            # Ghi chú thuật ngữ (Technical Term Note)
             st.markdown("""
             > **💡 術語說明 (Technical Note):** > **Diff Area (m²)** = **塗層面積差異** (Coating Area Variance)  
             > * **正值 (+):** 鋼帶延展 (Elongation)，導致塗漆消耗量增加。  
             > * **負值 (-):** 長度短缺 (Shortage)，可能源於剪切廢料 (Scrap) 或感測器誤差。
             """)
 
-            # Thêm cột Total Cut vào bảng Summary
             disp = summary[[order_c, 'Qty', 'In_m', 'Total_Cut', 'Out_m', 'Diff', 'Thick_Var', 'Area_m2']].copy()
             disp.columns = ['Order ID', 'Input Coil Number', 'Input (m)', 'Cut Scrap (m)', 'Output (m)', 'Diff (m)', 'Thick Var', 'Diff Area (m²)']
             disp['Input Coil Number'] = disp['Input Coil Number'].astype(int)
@@ -148,7 +146,6 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
                 det = df[df[order_c] == sel_order].copy()
                 det['Var'] = det[ccl_t] - det[cgl_t]
                 
-                # Chọn các cột hiển thị (thêm 2 cột cut)
                 det_f = det[[
                     mother_c, baby_c, 
                     cgl_t, cgl_w, cgl_l, 
@@ -156,7 +153,6 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
                     ccl_t, ccl_w, 'Var', ccl_l 
                 ]].copy()
                 
-                # Đổi tên cột
                 det_f.columns = [
                     'Input Coil ID (CGL)', 
                     'Output Coil ID (CCL)', 
