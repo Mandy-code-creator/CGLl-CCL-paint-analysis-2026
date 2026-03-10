@@ -88,154 +88,114 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
         inner_cut = "innercutlength"
 
         try:
+            # --- SỬA PHẦN CẦN THIẾT ---
             for col in [outer_cut, inner_cut]:
                 if col not in df.columns:
                     df[col] = 0
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
-            # 1. Ép tất cả các cột kích thước về dạng số
+            # Chuyển tất cả các cột size về số
             for col in [cgl_t, cgl_w, cgl_l, ccl_t, ccl_w, ccl_l]:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
-                
-            # --- THUẬT TOÁN ĐỊNH TUYẾN CUỘN TỰ ĐỘNG (FIXED) ---
-            # Bước A: Tách lấy gốc của cuộn mẹ (Ví dụ: '4BC134M00' -> '4BC134')
+            
+            # Tách base coil
             df['base_coil'] = df[mother_c].astype(str).str.replace(r'[A-Za-z]\d{2}$', '', regex=True)
             
-            # Bước B: Kiểm tra xem cuộn gốc 'X00' có tồn tại trong đơn hàng này không?
+            # Xác định cuộn mẹ gốc
             is_main_coil = df[mother_c].astype(str).str.endswith('X00')
             main_coil_present = df[is_main_coil].groupby([order_c, 'base_coil']).size().reset_index(name='has_main')
-            
             df = df.merge(main_coil_present, on=[order_c, 'base_coil'], how='left')
             df['has_main'] = df['has_main'].fillna(0) > 0
-
-            # Bước C: Tính TỔNG đầu ra của từng cuộn mẹ (Để đắp cho cuộn mồ côi bị xẻ nhiều dòng)
+            
+            # Tính tổng output của từng mother để phục vụ cuộn mồ côi
             sum_ccl_by_mother = df.groupby(mother_c)[ccl_l].transform('sum')
 
-            # Bước D: Áp dụng logic thay thế
-            mask_empty_cgl = df[cgl_l].isna() | (df[cgl_l] == 0)
-            
-            # Nếu là cuộn mồ côi (không có main X00) -> Lấy Tổng CCL đắp vào CGL
-            df.loc[mask_empty_cgl & ~df['has_main'], cgl_l] = sum_ccl_by_mother
-            
-            # Các ô còn lại (nhóm có X00 gánh) -> Cho bằng 0 để tránh cộng dồn
-            df[cgl_l] = df[cgl_l].fillna(0)
-            # ------------------------------------------------------------------
+            # --- MỚI: XỬ LÝ INPUT/OUTPUT CHO CUỘN CON THÀNH MẸ & MỒ CÔI ---
+            df['Input_L'] = 0
+            df['Output_L'] = df[ccl_l].fillna(0)
 
-            # 2. Sao chép Độ dày (Thick) & Độ rộng (Width) từ cuộn gốc
-            df[cgl_t] = df.groupby([order_c, 'base_coil'])[cgl_t].transform(lambda x: x.ffill().bfill()).fillna(0)
-            df[cgl_w] = df.groupby([order_c, 'base_coil'])[cgl_w].transform(lambda x: x.ffill().bfill()).fillna(0)
+            for base in df['base_coil'].unique():
+                sub = df[df['base_coil'] == base]
+                # Lấy mẹ gốc nếu có
+                main_rows = sub[sub[mother_c].str.endswith('X00')]
+                if not main_rows.empty:
+                    main_input = main_rows[ccl_l].sum()  # lấy tổng CCL_L của mẹ gốc
+                    # Gán Input cho tất cả dòng cùng base
+                    df.loc[df['base_coil']==base, 'Input_L'] = main_input
+                else:
+                    # Không có mẹ gốc => mồ côi
+                    df.loc[df['base_coil']==base, 'Input_L'] = sum_ccl_by_mother[sub.index]
 
-            # 3. Tránh lỗi mất dữ liệu với các ô trống ở CCL
-            df[ccl_t] = df[ccl_t].fillna(0)
-            df[ccl_w] = df[ccl_w].fillna(0)
-            df[ccl_l] = df[ccl_l].fillna(0)
+            # Diff chính xác
+            df['Diff_L'] = df['Output_L'] - df['Input_L']
+
+            # Đồng bộ Độ dày & Độ rộng từ CCL nếu CGL trống
+            df[cgl_t] = df[cgl_t].fillna(df[ccl_t])
+            df[cgl_w] = df[cgl_w].fillna(df[ccl_w])
 
             # --- GOM NHÓM THEO CUỘN MẸ ---
             s1 = df.groupby([order_c, mother_c]).agg({
-                cgl_t: 'mean', cgl_w: 'mean', cgl_l: 'first',
-                ccl_t: 'mean', ccl_w: 'mean', ccl_l: 'sum',
-                outer_cut: 'max', inner_cut: 'max' 
+                'Input_L': 'first', 'Output_L': 'sum', cgl_t: 'mean', cgl_w: 'mean',
+                outer_cut: 'max', inner_cut: 'max'
             }).reset_index()
 
-            # TỔNG HỢP TOÀN BỘ ĐƠN HÀNG
+            # Tổng hợp đơn hàng
             summary = s1.groupby(order_c).agg({
-                mother_c: 'count', cgl_l: 'sum', ccl_l: 'sum', 
-                outer_cut: 'sum', inner_cut: 'sum',
-                ccl_t: 'mean', cgl_t: 'mean', cgl_w: 'mean'
+                mother_c: 'count', 'Input_L': 'sum', 'Output_L': 'sum',
+                outer_cut: 'sum', inner_cut: 'sum', cgl_t: 'mean', cgl_w: 'mean'
             }).reset_index()
 
-            summary = summary.rename(columns={mother_c: 'Qty (Coils)', cgl_l: 'In_m', ccl_l: 'Out_m'})
-            
-            # TÍNH TOÁN HAO HỤT
+            summary = summary.rename(columns={mother_c: 'Qty (Coils)', 'Input_L': 'In_m', 'Output_L': 'Out_m'})
+
             summary['Total_Cut'] = summary[outer_cut] + summary[inner_cut]
             summary['Diff'] = summary['Out_m'] - (summary['In_m'] - summary['Total_Cut'])
-            summary['Thick_Var'] = summary[ccl_t] - summary[cgl_t]
             summary['Area_m2'] = (summary[cgl_w] / 1000) * summary['Diff']
 
             # --- 1. ORDER SUMMARY ---
             st.subheader("1. Order Summary")
-            
-            st.markdown("""
-            > **💡 術語說明 (Technical Note):** > **Diff Area (m²)** = **塗層面積差異** (Coating Area Variance)  
-            > * **正值 (+):** 鋼帶延展 (Elongation)，導致塗漆消耗量增加。  
-            > * **負值 (-):** 長度短缺 (Shortage)，已扣除頭尾廢料 (Scrap Deducted)，可能源於感測器誤差。
-            """)
-
-            disp = summary[[order_c, 'Qty (Coils)', 'In_m', 'Total_Cut', 'Out_m', 'Diff', 'Thick_Var', 'Area_m2']].copy()
-            disp.columns = ['Order ID', 'Qty (Coils)', 'Input (m)', 'Cut Scrap (m)', 'Output (m)', 'Diff (m)', 'Thick Var', 'Diff Area (m²)']
-            
+            disp = summary[[order_c, 'Qty (Coils)', 'In_m', 'Total_Cut', 'Out_m', 'Diff', 'Area_m2']].copy()
+            disp.columns = ['Order ID', 'Qty (Coils)', 'Input (m)', 'Cut Scrap (m)', 'Output (m)', 'Diff (m)', 'Diff Area (m²)']
             disp = disp.sort_values(by='Cut Scrap (m)', ascending=False).reset_index(drop=True)
-            
-            disp['Qty (Coils)'] = disp['Qty (Coils)'].astype(int)
             disp.insert(0, 'No.', range(1, len(disp) + 1))
-            
             st.table(disp.set_index('No.').style.format({
                 "Input (m)": "{:,.0f}", "Cut Scrap (m)": "{:,.0f}", "Output (m)": "{:,.0f}",
-                "Diff (m)": "{:.2f}", "Thick Var": "{:.3f}", "Diff Area (m²)": "{:.2f}"
+                "Diff (m)": "{:.2f}", "Diff Area (m²)": "{:.2f}"
             }))
 
-           # --- 2. PRODUCTION COIL DETAILS ---
+            # --- 2. PRODUCTION COIL DETAILS ---
             st.divider()
             st.subheader("2. Production Coil Details") 
-            
             order_list = df[order_c].unique()
-            
             sel_order = st.selectbox(
                 "🔍 Type or Select Order ID to view details:", 
                 options=order_list,
                 index=None,
                 placeholder="Ex: P240801... (Click and type here to search)"
             )
-            
             if sel_order:
                 det = df[df[order_c] == sel_order].copy()
-                det['Var'] = det[ccl_t] - det[cgl_t]
-                
                 det_f = det[[
-                    mother_c, baby_c, 
-                    cgl_t, cgl_w, cgl_l, 
-                    outer_cut, inner_cut,
-                    ccl_t, ccl_w, 'Var', ccl_l 
+                    mother_c, baby_c, 'Input_L', 'Output_L', 'Diff_L', cgl_t, cgl_w, outer_cut, inner_cut
                 ]].copy()
-                
                 det_f.columns = [
-                    'Input Coil ID (CGL)', 
-                    'Output Coil ID (CCL)', 
-                    'Input Thick (mm)', 
-                    'Input Width (mm)', 
-                    'Input Length (m)', 
-                    'Outer Cut (m)',
-                    'Inner Cut (m)',
-                    'Output Thick (mm)', 
-                    'Output Width (mm)', 
-                    'Thick Deviation (mm)', 
-                    'Output Length (m)'
+                    'Input Coil ID (CGL)', 'Output Coil ID (CCL)', 'Input Length (m)', 'Output Length (m)',
+                    'Diff (m)', 'Input Thick (mm)', 'Input Width (mm)', 'Outer Cut (m)', 'Inner Cut (m)'
                 ]
-                
                 st.table(det_f.style.format({
-                    "Input Thick (mm)": "{:.3f}", 
-                    "Input Width (mm)": "{:,.0f}", 
-                    "Input Length (m)": "{:,.0f}",
-                    "Outer Cut (m)": "{:,.0f}",
-                    "Inner Cut (m)": "{:,.0f}",
-                    "Output Thick (mm)": "{:.3f}", 
-                    "Output Width (mm)": "{:,.0f}",
-                    "Thick Deviation (mm)": "{:.3f}", 
-                    "Output Length (m)": "{:,.0f}"
+                    "Input Length (m)": "{:,.0f}", "Output Length (m)": "{:,.0f}", "Diff (m)": "{:,.0f}",
+                    "Input Thick (mm)": "{:.3f}", "Input Width (mm)": "{:,.0f}",
+                    "Outer Cut (m)": "{:,.0f}", "Inner Cut (m)": "{:,.0f}"
                 }))
-                
-            # --- 3. VISUAL INSIGHTS (CONCLUSIONS IN CHINESE) ---
+
+            # --- 3. VISUAL INSIGHTS ---
             st.divider()
             st.subheader("3. Visual Insights & Analysis")
-            
             f1 = px.bar(disp, x='Order ID', y='Diff Area (m²)', color='Diff (m)', 
                         color_continuous_scale='RdBu', title="Extra Area per Order")
             st.plotly_chart(f1, use_container_width=True)
-            st.info("**分析結論:** 監控各訂單的塗層面積偏差。偏離中心值的數據代表生產投入與產出不一致，建議優先核對該批次的生產日誌。")
 
             f2 = px.histogram(disp, x='Diff (m)', nbins=15, title="Production Variance Distribution")
             st.plotly_chart(f2, use_container_width=True)
-            st.warning("**分析結論:** 數據分布反映生產穩定性。離群值標示該訂單存在異常長度變化，需確認是物理延展、裁切損耗或是計量誤差。")
 
             disp_chart = disp.sort_values(by='Cut Scrap (m)', ascending=False)
             f3 = px.bar(disp_chart, x='Order ID', y='Cut Scrap (m)', 
@@ -243,7 +203,6 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
                         color='Cut Scrap (m)', color_continuous_scale='Reds')
             f3.update_layout(yaxis_title="Scrap Length (m)")
             st.plotly_chart(f3, use_container_width=True)
-            st.error("**分析結論:** 各訂單的剪切廢料總量。監控此數據有助於評估來料質量與生產初期的裁切損耗。若數值異常偏高，需檢查鋼捲頭尾品質狀況。")
 
             # --- 4. EXECUTIVE SUMMARY ---
             st.divider()
@@ -254,7 +213,7 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
             **生產產出綜合分析:**
             * **總投入 (Total Input):** {t_in:,.0f} m
             * **總產出 (Total Output):** {t_out:,.0f} m
-            * **不明面積差異 (Area Shortfall):** {area_s:,.2f} m² (需進一步核實廢料申報準確性)
+            * **不明面積差異 (Area Shortfall):** {area_s:,.2f} m²
             """)
 
             # --- 5. EXPORT ---
