@@ -9,31 +9,50 @@ import re
 st.set_page_config(page_title="Length Variance Analysis: Total CGL vs CCL per Order", layout="wide")
 
 # ==========================================================
-# 1. AUTO-SYNC CONFIGURATION
+# 1. THEME SELECTION (NEW FEATURE)
 # ==========================================================
-GSHEET_URL = "https://docs.google.com/spreadsheets/d/1-kayrLVYwOO66Xxc7Vk7dbTNZ5Aph4MVd9DMTz6RJS0/edit?gid=0#gid=0"
+theme_choice = st.radio("🎨 Select App Theme:", ["Light Mode (Standard)", "Dark Mode (Professional)"], horizontal=True)
 
-# --- MINIMALIST DESIGN: UNIFORM GRID LINES ---
-st.markdown("""
+if theme_choice == "Dark Mode (Professional)":
+    bg_color = "#0f172a"
+    card_bg = "#1e293b"
+    text_color = "#f8fafc"
+    sub_text = "#cbd5e1"
+    table_border = "#334155"
+    header_bg = "#0f172a"
+    plotly_template = "plotly_dark"
+    accent_color = "#38bdf8"
+else:
+    bg_color = "#ffffff"
+    card_bg = "#ffffff"
+    text_color = "#1e3a8a"
+    sub_text = "#334155"
+    table_border = "#e2e8f0"
+    header_bg = "#f8fafc"
+    plotly_template = "plotly_white"
+    accent_color = "#1e3a8a"
+
+st.markdown(f"""
     <style>
-    .stApp { background-color: #ffffff; }
+    .stApp {{ background-color: {bg_color}; }}
     div[data-testid="stVerticalBlock"] > div:has(div.stPlotlyChart), 
-    div[data-testid="stVerticalBlock"] > div:has(div.stTable),
-    div[data-testid="stVerticalBlock"] > div:has(div.stDataFrame) {
-        background-color: #ffffff; padding: 20px; border-radius: 0px;
-        margin-bottom: 20px; border: none;
-    }
-    h1, h2, h3 { color: #1e3a8a; font-family: 'Segoe UI', sans-serif; font-weight: 700 !important; }
-    table { width: 100% !important; border-collapse: collapse !important; font-family: 'Segoe UI', sans-serif; color: #334155; border: 1px solid #e2e8f0 !important; }
-    th { border: 1px solid #e2e8f0 !important; color: #1e3a8a !important; text-align: center !important; padding: 12px 8px !important; font-size: 13px !important; background-color: #f8fafc !important; }
-    td { text-align: center !important; padding: 10px 8px !important; border: 1px solid #e2e8f0 !important; font-size: 13px !important; }
-    tr:hover { background-color: #f1f5f9; }
+    div[data-testid="stVerticalBlock"] > div:has(div.stDataFrame) {{
+        background-color: {card_bg}; padding: 20px; border-radius: 8px;
+        margin-bottom: 20px; border: {"1px solid " + table_border if theme_choice == "Light Mode (Standard)" else "none"};
+    }}
+    h1, h2, h3 {{ color: {text_color}; font-family: 'Segoe UI', sans-serif; font-weight: 700 !important; }}
+    .stMarkdown p {{ color: {sub_text} !important; }}
+    .stSelectbox label, .stRadio label {{ color: {text_color} !important; font-weight: bold; }}
     </style>
     """, unsafe_allow_html=True)
 
 st.title("Length Variance Analysis: Total CGL vs CCL per Order")
 
-# --- DATA FETCHING ---
+# ==========================================================
+# 2. DATA PROCESSING (YOUR ORIGINAL LOGIC)
+# ==========================================================
+GSHEET_URL = "https://docs.google.com/spreadsheets/d/1-kayrLVYwOO66Xxc7Vk7dbTNZ5Aph4MVd9DMTz6RJS0/edit?gid=0#gid=0"
+
 @st.cache_data(ttl=300)
 def load_auto_data(url):
     try:
@@ -51,12 +70,8 @@ def load_auto_data(url):
         st.error(f"Connection Error: {e}")
         return None
 
-# =============================
-# 2. CORE LOGIC
-# =============================
-if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY":
+if GSHEET_URL:
     df = load_auto_data(GSHEET_URL)
-    
     if df is not None:
         def get_col(default, possible_names):
             for name in possible_names:
@@ -74,7 +89,6 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
         ccl_t = get_col("實測厚度", ["實測厚度", "实测厚度"])
         outer_cut = get_col("outercutlength", ["outercutlength", "outercut"])
         inner_cut = get_col("innercutlength", ["innercutlength", "innercut"])
-        
         line_c = get_col("線別", ["線別", "线别"])
         out_grade_c = get_col("產出等級", ["產出等級", "产出等级"])
         next_proc_c = get_col("下製程", ["下製程", "下制程"])
@@ -88,7 +102,7 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
                 if col not in df.columns: df[col] = 0
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
-            # --- ROUTING LOGIC ---
+            # --- ROUTING LOGIC (RESTORED) ---
             df['is_first_baby'] = ~df.duplicated(subset=[order_c, baby_c], keep='first')
             df[ccl_l] = df.apply(lambda r: r[ccl_l] if r['is_first_baby'] else 0, axis=1)
             df['base_coil'] = df[mother_c].astype(str).str[:-3]
@@ -114,7 +128,6 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
             df[cgl_t] = df.groupby([order_c, 'base_coil'])[cgl_t].transform(lambda x: x.replace(0, pd.NA).ffill().bfill()).fillna(0)
             df[cgl_w] = df.groupby([order_c, 'base_coil'])[cgl_w].transform(lambda x: x.replace(0, pd.NA).ffill().bfill()).fillna(0)
 
-            # --- AGGREGATION ---
             s1 = df.groupby([order_c, mother_c]).agg({
                 cgl_t: 'mean', cgl_w: 'mean', cgl_l: 'first',
                 ccl_t: 'mean', ccl_w: 'mean', ccl_l: 'sum',
@@ -142,7 +155,7 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
             st.dataframe(disp.set_index('No.').style.format({
                 "Input Width (mm)": "{:,.0f}", "Input (m)": "{:,.0f}", "Cut Scrap (m)": "{:,.0f}", 
                 "Output (m)": "{:,.0f}", "Diff (m)": "{:,.0f}", "Thick Var": "{:.3f}", "Diff Area (m²)": "{:,.0f}"
-            }), height=600, use_container_width=True)
+            }), height=500, use_container_width=True)
 
            # --- UI: PRODUCTION COIL DETAILS ---
             st.divider()
@@ -157,16 +170,15 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
                     "In Thick": "{:.3f}", "In Width": "{:,.0f}", "In Len": "{:,.0f}",
                     "Outer Cut": "{:,.0f}", "Inner Cut": "{:,.0f}", "Out Thick": "{:.3f}", 
                     "Out Width": "{:,.0f}", "Thick Dev": "{:.3f}", "Out Len": "{:,.0f}"
-                }), height=600, use_container_width=True)
+                }), height=500, use_container_width=True)
                 
             # --- UI: VISUAL INSIGHTS ---
             st.divider()
             st.subheader("3. Visual Insights & Analysis")
-            st.plotly_chart(px.bar(disp, x='Order ID', y='Diff Area (m²)', color='Diff (m)', color_continuous_scale='Blues_r', title="Extra Area per Order"), use_container_width=True)
+            st.plotly_chart(px.bar(disp, x='Order ID', y='Diff Area (m²)', color='Diff (m)', color_continuous_scale='Blues_r', template=plotly_template), use_container_width=True)
             st.info("**分析結論:** 監控各訂單的塗層面積偏差。偏離中心值的數據代表生產投入與產出不一致，建議優先核對該批次的生產日誌。")
 
-            st.plotly_chart(px.bar(disp.sort_values(by='Cut Scrap (m)', ascending=False), x='Order ID', y='Cut Scrap (m)', 
-                           title="Total Cut Scrap per Order (Outer + Inner)", color='Cut Scrap (m)', color_continuous_scale='Reds'), use_container_width=True)
+            st.plotly_chart(px.bar(disp.sort_values(by='Cut Scrap (m)', ascending=False), x='Order ID', y='Cut Scrap (m)', color='Cut Scrap (m)', color_continuous_scale='Reds', template=plotly_template), use_container_width=True)
             st.error("**分析結論:** 各訂單的剪切廢料總量。監控此數據有助於評估來料質量與生產初期的裁切損耗。若數值異常偏高，需檢查鋼捲頭尾品質狀況。")
 
             # --- UI: EXECUTIVE SUMMARY ---
@@ -174,16 +186,14 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
             st.subheader("4. Executive Summary")
             t_in, t_out = disp['Input (m)'].sum(), disp['Output (m)'].sum()
             area_s = abs(disp[disp['Diff (m)'] < 0]['Diff Area (m²)'].sum())
-            st.markdown(f"**生產產出綜合分析:** \n* **總投入 (Total Input):** {t_in:,.0f} m  \n* **總產出 (Total Output):** {t_out:,.0f} m  \n* **不明面積差異 (Area Shortfall):** {area_s:,.2f} m² (需進一步核實廢料申報準確性)")
+            st.markdown(f"**生產產出綜合分析:** \n* **總投入 (Total Input):** {t_in:,.0f} m  \n* **總產出 (Total Output):** {t_out:,.0f} m  \n* **不明面積差異 (Area Shortfall):** {area_s:,.2f} m²")
 
             # --- UI: EXPORT ---
             st.subheader("5. Export Data")
             buf = io.BytesIO()
             with pd.ExcelWriter(buf, engine='xlsxwriter') as writer:
                 disp.to_excel(writer, sheet_name='Summary', index=False)
-            st.download_button("📊 Download Excel", data=buf.getvalue(), file_name="Report.xlsx", type="primary")
+            st.download_button("📊 Download Excel Report", data=buf.getvalue(), file_name="Report.xlsx", type="primary")
 
         except Exception as e:
             st.error(f"Logic Error: {e}")
-else:
-    st.info("Please insert the Google Sheet Link.")
