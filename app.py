@@ -84,20 +84,35 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
         cgl_t, cgl_w, cgl_l = "镀锌實測厚度", "镀锌測寬度", "镀锌測長度"
         ccl_t, ccl_w, ccl_l = "實測厚度", "實測寬度", "實測長度"
 
+        # Tên 2 cột mới sau khi xóa khoảng trắng
+        outer_cut = "outercutlength"
+        inter_cut = "intercutlenght"
+
         try:
+            # Đảm bảo 2 cột tồn tại và là số (nếu Google Sheet bị trống)
+            for col in [outer_cut, inter_cut]:
+                if col not in df.columns:
+                    df[col] = 0
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+
             # Aggregate Logic
             s1 = df.groupby([order_c, mother_c]).agg({
                 cgl_t: 'mean', cgl_w: 'mean', cgl_l: 'first',
-                ccl_t: 'mean', ccl_w: 'mean', ccl_l: 'sum'
+                ccl_t: 'mean', ccl_w: 'mean', ccl_l: 'sum',
+                outer_cut: 'sum', inter_cut: 'sum'
             }).reset_index()
 
             summary = s1.groupby(order_c).agg({
                 mother_c: 'count', cgl_l: 'sum', ccl_l: 'sum', 
+                outer_cut: 'sum', inter_cut: 'sum',
                 ccl_t: 'mean', cgl_t: 'mean', cgl_w: 'mean'
             }).reset_index()
 
             summary = summary.rename(columns={mother_c: 'Qty', cgl_l: 'In_m', ccl_l: 'Out_m'})
-            summary['Diff'] = summary['Out_m'] - summary['In_m']
+            
+            # Giữ nguyên logic tính toán của bạn, chỉ bổ sung trừ hao phần đã cắt
+            summary['Total_Cut'] = summary[outer_cut] + summary[inter_cut]
+            summary['Diff'] = summary['Out_m'] - (summary['In_m'] - summary['Total_Cut'])
             summary['Thick_Var'] = summary[ccl_t] - summary[cgl_t]
             summary['Area_m2'] = (summary[cgl_w] / 1000) * summary['Diff']
 
@@ -111,19 +126,20 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
             > * **負值 (-):** 長度短缺 (Shortage)，可能源於剪切廢料 (Scrap) 或感測器誤差。
             """)
 
-            disp = summary[[order_c, 'Qty', 'In_m', 'Out_m', 'Diff', 'Thick_Var', 'Area_m2']].copy()
-            disp.columns = ['Order ID', 'Input Coil Number', 'Input (m)', 'Output (m)', 'Diff (m)', 'Thick Var', 'Diff Area (m²)']
+            # Thêm cột Total Cut vào bảng Summary
+            disp = summary[[order_c, 'Qty', 'In_m', 'Total_Cut', 'Out_m', 'Diff', 'Thick_Var', 'Area_m2']].copy()
+            disp.columns = ['Order ID', 'Input Coil Number', 'Input (m)', 'Cut Scrap (m)', 'Output (m)', 'Diff (m)', 'Thick Var', 'Diff Area (m²)']
             disp['Input Coil Number'] = disp['Input Coil Number'].astype(int)
             disp.insert(0, 'No.', range(1, len(disp) + 1))
             
             st.table(disp.set_index('No.').style.format({
-                "Input (m)": "{:,.0f}", "Output (m)": "{:,.0f}",
+                "Input (m)": "{:,.0f}", "Cut Scrap (m)": "{:,.0f}", "Output (m)": "{:,.0f}",
                 "Diff (m)": "{:.2f}", "Thick Var": "{:.3f}", "Diff Area (m²)": "{:.2f}"
             }))
 
            # --- 2. PRODUCTION COIL DETAILS ---
             st.divider()
-            st.subheader("2. Production Coil Details") # Đổi tên subheader cho chuyên nghiệp
+            st.subheader("2. Production Coil Details") 
             
             order_list = df[order_c].unique()
             sel_order = st.selectbox("Select Order ID to view details:", options=order_list)
@@ -132,20 +148,23 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
                 det = df[df[order_c] == sel_order].copy()
                 det['Var'] = det[ccl_t] - det[cgl_t]
                 
-                # Chọn các cột hiển thị
+                # Chọn các cột hiển thị (thêm 2 cột cut)
                 det_f = det[[
                     mother_c, baby_c, 
                     cgl_t, cgl_w, cgl_l, 
+                    outer_cut, inter_cut,
                     ccl_t, ccl_w, 'Var', ccl_l 
                 ]].copy()
                 
-                # Đổi tên cột: Bỏ "Mother/Baby", dùng "Input/Output" hoặc "CGL/CCL"
+                # Đổi tên cột
                 det_f.columns = [
                     'Input Coil ID (CGL)', 
                     'Output Coil ID (CCL)', 
                     'Input Thick (mm)', 
                     'Input Width (mm)', 
                     'Input Length (m)', 
+                    'Outer Cut (m)',
+                    'Inter Cut (m)',
                     'Output Thick (mm)', 
                     'Output Width (mm)', 
                     'Thick Deviation (mm)', 
@@ -156,6 +175,8 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
                     "Input Thick (mm)": "{:.3f}", 
                     "Input Width (mm)": "{:,.0f}", 
                     "Input Length (m)": "{:,.0f}",
+                    "Outer Cut (m)": "{:,.0f}",
+                    "Inter Cut (m)": "{:,.0f}",
                     "Output Thick (mm)": "{:.3f}", 
                     "Output Width (mm)": "{:,.0f}",
                     "Thick Deviation (mm)": "{:.3f}", 
