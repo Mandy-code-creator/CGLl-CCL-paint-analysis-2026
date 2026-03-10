@@ -97,7 +97,7 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
             for col in [cgl_t, cgl_w, cgl_l, ccl_t, ccl_w, ccl_l]:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
                 
-            # --- THUẬT TOÁN ĐỊNH TUYẾN CUỘN TỰ ĐỘNG ---
+            # --- THUẬT TOÁN ĐỊNH TUYẾN CUỘN TỰ ĐỘNG (FIXED) ---
             # Bước A: Tách lấy gốc của cuộn mẹ (Ví dụ: '4BC134M00' -> '4BC134')
             df['base_coil'] = df[mother_c].astype(str).str.replace(r'[A-Za-z]\d{2}$', '', regex=True)
             
@@ -108,17 +108,17 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
             df = df.merge(main_coil_present, on=[order_c, 'base_coil'], how='left')
             df['has_main'] = df['has_main'].fillna(0) > 0
 
-            # Bước C: Hàm quyết định chiều dài Input tự động 100%
-            def resolve_cgl_l(row):
-                val = row[cgl_l]
-                if pd.isna(val) or val == 0:
-                    if row['has_main']:
-                        return 0  # Có X00 -> Trả về 0 để X00 gánh
-                    else:
-                        return row[ccl_l] # Mồ côi -> Lấy Output làm Input (Giúp Diff = 0)
-                return val
+            # Bước C: Tính TỔNG đầu ra của từng cuộn mẹ (Để đắp cho cuộn mồ côi bị xẻ nhiều dòng)
+            sum_ccl_by_mother = df.groupby(mother_c)[ccl_l].transform('sum')
 
-            df[cgl_l] = df.apply(resolve_cgl_l, axis=1)
+            # Bước D: Áp dụng logic thay thế
+            mask_empty_cgl = df[cgl_l].isna() | (df[cgl_l] == 0)
+            
+            # Nếu là cuộn mồ côi (không có main X00) -> Lấy Tổng CCL đắp vào CGL
+            df.loc[mask_empty_cgl & ~df['has_main'], cgl_l] = sum_ccl_by_mother
+            
+            # Các ô còn lại (nhóm có X00 gánh) -> Cho bằng 0 để tránh cộng dồn
+            df[cgl_l] = df[cgl_l].fillna(0)
             # ------------------------------------------------------------------
 
             # 2. Sao chép Độ dày (Thick) & Độ rộng (Width) từ cuộn gốc
