@@ -8,32 +8,57 @@ import re
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="Length Variance Analysis: Total CGL vs CCL per Order", layout="wide")
 
-# ==========================================================
-# 1. AUTO-SYNC CONFIGURATION
-# ==========================================================
-GSHEET_URL = "https://docs.google.com/spreadsheets/d/1-kayrLVYwOO66Xxc7Vk7dbTNZ5Aph4MVd9DMTz6RJS0/edit?gid=0#gid=0"
-
-# --- MINIMALIST DESIGN: UNIFORM GRID LINES ---
+# --- PROFESSIONAL THEME CSS ---
 st.markdown("""
-    <style>
-    .stApp { background-color: #ffffff; }
-    div[data-testid="stVerticalBlock"] > div:has(div.stPlotlyChart), 
-    div[data-testid="stVerticalBlock"] > div:has(div.stTable),
-    div[data-testid="stVerticalBlock"] > div:has(div.stDataFrame) {
-        background-color: #ffffff; padding: 20px; border-radius: 0px;
-        margin-bottom: 20px; border: none;
-    }
-    h1, h2, h3 { color: #1e3a8a; font-family: 'Segoe UI', sans-serif; font-weight: 700 !important; }
-    table { width: 100% !important; border-collapse: collapse !important; font-family: 'Segoe UI', sans-serif; color: #334155; border: 1px solid #e2e8f0 !important; }
-    th { border: 1px solid #e2e8f0 !important; color: #1e3a8a !important; text-align: center !important; padding: 12px 8px !important; font-size: 13px !important; background-color: #f8fafc !important; }
-    td { text-align: center !important; padding: 10px 8px !important; border: 1px solid #e2e8f0 !important; font-size: 13px !important; }
-    tr:hover { background-color: #f1f5f9; }
-    </style>
-    """, unsafe_allow_html=True)
+<style>
+.stApp { background-color: #f1f5f9; font-family: 'Segoe UI', sans-serif; }
+
+/* Card */
+div[data-testid="stVerticalBlock"] > div:has(div.stPlotlyChart), 
+div[data-testid="stVerticalBlock"] > div:has(div.stTable),
+div[data-testid="stVerticalBlock"] > div:has(div.stDataFrame) {
+    background: linear-gradient(135deg, #ffffff, #e2e8f0);
+    padding: 20px;
+    border-radius: 12px;
+    margin-bottom: 20px;
+    border: 1px solid #cbd5e1;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+}
+
+/* Titles */
+h1 {
+    background: linear-gradient(90deg, #1e3a8a, #3b82f6);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-size: 36px;
+    font-weight: 700 !important;
+}
+h2, h3 { color: #1e40af; font-weight: 600; }
+
+/* Text */
+.stMarkdown p { color: #334155; }
+
+/* Table */
+table { width: 100% !important; border-collapse: collapse !important; color: #334155; border: 1px solid #e2e8f0 !important; }
+th { border: 1px solid #e2e8f0 !important; color: #1e3a8a !important; text-align: center; padding: 12px 8px; font-size: 13px; background-color: #f8fafc; }
+td { text-align: center; padding: 10px 8px; border: 1px solid #e2e8f0; font-size: 13px; }
+tr:hover { background-color: rgba(56, 189, 248, 0.1); }
+
+/* Buttons */
+button[kind="primary"] {
+    background-color: #1e40af !important; 
+    color: #ffffff !important; 
+    border-radius: 8px; 
+    font-weight: 600;
+}
+</style>
+""", unsafe_allow_html=True)
 
 st.title("Length Variance Analysis: Total CGL vs CCL per Order")
 
 # --- DATA FETCHING ---
+GSHEET_URL = "https://docs.google.com/spreadsheets/d/1-kayrLVYwOO66Xxc7Vk7dbTNZ5Aph4MVd9DMTz6RJS0/edit?gid=0#gid=0"
+
 @st.cache_data(ttl=300)
 def load_auto_data(url):
     try:
@@ -74,7 +99,6 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
         ccl_t = get_col("實測厚度", ["實測厚度", "实测厚度"])
         outer_cut = get_col("outercutlength", ["outercutlength", "outercut"])
         inner_cut = get_col("innercutlength", ["innercutlength", "innercut"])
-        
         line_c = get_col("線別", ["線別", "线别"])
         out_grade_c = get_col("產出等級", ["產出等級", "产出等级"])
         next_proc_c = get_col("下製程", ["下製程", "下制程"])
@@ -139,12 +163,9 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
             disp.columns = ['Order ID', 'Qty (Coils)', 'Input Width (mm)', 'Input (m)', 'Cut Scrap (m)', 'Output (m)', 'Diff (m)', 'Thick Var', 'Diff Area (m²)']
             disp = disp.sort_values(by='Cut Scrap (m)', ascending=False).reset_index(drop=True)
             disp.insert(0, 'No.', range(1, len(disp) + 1))
-            st.dataframe(disp.set_index('No.').style.format({
-                "Input Width (mm)": "{:,.0f}", "Input (m)": "{:,.0f}", "Cut Scrap (m)": "{:,.0f}", 
-                "Output (m)": "{:,.0f}", "Diff (m)": "{:,.0f}", "Thick Var": "{:.3f}", "Diff Area (m²)": "{:,.0f}"
-            }), height=600, use_container_width=True)
+            st.dataframe(disp.set_index('No.'), height=600, use_container_width=True)
 
-           # --- UI: PRODUCTION COIL DETAILS ---
+            # --- UI: PRODUCTION COIL DETAILS ---
             st.divider()
             st.subheader("2. Production Coil Details") 
             sel_order = st.selectbox("🔍 Select Order ID:", options=df[order_c].unique(), index=None)
@@ -153,28 +174,21 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
                 det['Var'] = det[ccl_t] - det[cgl_t]
                 det_f = det[[mother_c, baby_c, line_c, out_grade_c, next_proc_c, cgl_t, cgl_w, cgl_l, outer_cut, inner_cut, ccl_t, ccl_w, 'Var', ccl_l]].copy()
                 det_f.columns = ['Input ID', 'Output ID', 'Line', 'Grade', 'Next Proc', 'In Thick', 'In Width', 'In Len', 'Outer Cut', 'Inner Cut', 'Out Thick', 'Out Width', 'Thick Dev', 'Out Len']
-                st.dataframe(det_f.style.format({
-                    "In Thick": "{:.3f}", "In Width": "{:,.0f}", "In Len": "{:,.0f}",
-                    "Outer Cut": "{:,.0f}", "Inner Cut": "{:,.0f}", "Out Thick": "{:.3f}", 
-                    "Out Width": "{:,.0f}", "Thick Dev": "{:.3f}", "Out Len": "{:,.0f}"
-                }), height=600, use_container_width=True)
+                st.dataframe(det_f, height=600, use_container_width=True)
                 
             # --- UI: VISUAL INSIGHTS ---
             st.divider()
             st.subheader("3. Visual Insights & Analysis")
-            st.plotly_chart(px.bar(disp, x='Order ID', y='Diff Area (m²)', color='Diff (m)', color_continuous_scale='Blues_r', title="Extra Area per Order"), use_container_width=True)
-            st.info("**分析結論:** 監控各訂單的塗層面積偏差。偏離中心值的數據代表生產投入與產出不一致，建議優先核對該批次的生產日誌。")
-
+            st.plotly_chart(px.bar(disp, x='Order ID', y='Diff Area (m²)', color='Diff (m)', color_continuous_scale='Tealgrn', title="Extra Area per Order"), use_container_width=True)
             st.plotly_chart(px.bar(disp.sort_values(by='Cut Scrap (m)', ascending=False), x='Order ID', y='Cut Scrap (m)', 
                            title="Total Cut Scrap per Order (Outer + Inner)", color='Cut Scrap (m)', color_continuous_scale='Reds'), use_container_width=True)
-            st.error("**分析結論:** 各訂單的剪切廢料總量。監控此數據有助於評估來料質量與生產初期的裁切損耗。若數值異常偏高，需檢查鋼捲頭尾品質狀況。")
 
             # --- UI: EXECUTIVE SUMMARY ---
             st.divider()
             st.subheader("4. Executive Summary")
             t_in, t_out = disp['Input (m)'].sum(), disp['Output (m)'].sum()
             area_s = abs(disp[disp['Diff (m)'] < 0]['Diff Area (m²)'].sum())
-            st.markdown(f"**生產產出綜合分析:** \n* **總投入 (Total Input):** {t_in:,.0f} m  \n* **總產出 (Total Output):** {t_out:,.0f} m  \n* **不明面積差異 (Area Shortfall):** {area_s:,.2f} m² (需進一步核實廢料申報準確性)")
+            st.markdown(f"**生產產出綜合分析:** \n* **總投入 (Total Input):** {t_in:,.0f} m  \n* **總產出 (Total Output):** {t_out:,.0f} m  \n* **不明面積差異 (Area Shortfall):** {area_s:,.2f} m²")
 
             # --- UI: EXPORT ---
             st.subheader("5. Export Data")
