@@ -64,7 +64,7 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
             return default
 
         order_c = get_col("訂單號碼", ["訂單號碼", "订单号码"])
-        mother_c = get_col("投入鋼捲號碼", ["投入鋼捲號碼", "投入钢卷号码"])
+        mother_c = get_col("投入鋼捲號碼", ["投入鋼捲號碼", "投入钢_号码"])
         baby_c = get_col("產出鋼捲號碼", ["產出鋼捲號碼", "产出钢卷号码"])
         cgl_l = get_col("镀锌測長度", ["镀锌測長度", "镀锌實測長度", "镀锌长度", "鍍鋅測長度"])
         ccl_l = get_col("實測長度", ["實測長度", "实测长度"])
@@ -75,13 +75,11 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
         outer_cut = get_col("outercutlength", ["outercutlength", "outercut"])
         inner_cut = get_col("innercutlength", ["innercutlength", "innercut"])
         
-        # New Column: Line Name (線別)
         line_c = get_col("線別", ["線別", "线别"])
         out_grade_c = get_col("產出等級", ["產出等級", "产出等级"])
         next_proc_c = get_col("下製程", ["下製程", "下制程"])
 
         try:
-            # Safe handle for string columns
             for col in [line_c, out_grade_c, next_proc_c]:
                 if col not in df.columns: df[col] = "-"
                 df[col] = df[col].fillna("-").astype(str)
@@ -90,7 +88,7 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
                 if col not in df.columns: df[col] = 0
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
-            # --- AUTOMATIC ROUTING LOGIC (YOUR ORIGINAL) ---
+            # --- DEDUPLICATION & ROUTING LOGIC ---
             df['is_first_baby'] = ~df.duplicated(subset=[order_c, baby_c], keep='first')
             df[ccl_l] = df.apply(lambda r: r[ccl_l] if r['is_first_baby'] else 0, axis=1)
             df['base_coil'] = df[mother_c].astype(str).str[:-3]
@@ -153,14 +151,11 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
             st.divider()
             st.subheader("2. Production Coil Details") 
             sel_order = st.selectbox("🔍 Select Order ID:", options=df[order_c].unique(), index=None)
-            
             if sel_order:
                 det = df[df[order_c] == sel_order].copy()
                 det['Var'] = det[ccl_t] - det[cgl_t]
-                # Added 'line_c' to the columns list
                 det_f = det[[mother_c, baby_c, line_c, out_grade_c, next_proc_c, cgl_t, cgl_w, cgl_l, outer_cut, inner_cut, ccl_t, ccl_w, 'Var', ccl_l]].copy()
                 det_f.columns = ['Input ID', 'Output ID', 'Line', 'Grade', 'Next Proc', 'In Thick', 'In Width', 'In Len', 'Outer Cut', 'Inner Cut', 'Out Thick', 'Out Width', 'Thick Dev', 'Out Len']
-                
                 st.dataframe(
                     det_f.style.format({
                         "In Thick": "{:.3f}", "In Width": "{:,.0f}", "In Len": "{:,.0f}",
@@ -172,7 +167,14 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
             # --- 3. VISUAL INSIGHTS ---
             st.divider()
             st.subheader("3. Visual Insights & Analysis")
-            st.plotly_chart(px.bar(disp, x='Order ID', y='Diff Area (m²)', color='Diff (m)', color_continuous_scale='Blues_r'), use_container_width=True)
+            st.plotly_chart(px.bar(disp, x='Order ID', y='Diff Area (m²)', color='Diff (m)', color_continuous_scale='Blues_r', title="Extra Area per Order"), use_container_width=True)
+            
+            # THE RESTORED CUT SCRAP CHART
+            f_scrap = px.bar(disp.sort_values(by='Cut Scrap (m)', ascending=False), 
+                           x='Order ID', y='Cut Scrap (m)', 
+                           title="Total Cut Scrap per Order (Outer + Inner)",
+                           color='Cut Scrap (m)', color_continuous_scale='Reds')
+            st.plotly_chart(f_scrap, use_container_width=True)
 
             # --- 4. EXECUTIVE SUMMARY ---
             st.divider()
