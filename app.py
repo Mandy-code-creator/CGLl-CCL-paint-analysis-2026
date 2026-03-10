@@ -66,7 +66,6 @@ def load_auto_data(url):
                 gid = url.split("gid=")[1].split("&")[0]
             csv_url = f"{base_url}/export?format=csv&gid={gid}"
             df = pd.read_csv(csv_url)
-            # Ép tất cả tên cột về chữ thường, xóa khoảng trắng để chống lỗi gõ sai/in hoa
             df.columns = df.columns.astype(str).str.strip().str.lower().str.replace(r'\s+', '', regex=True)
             return df
         return None
@@ -85,26 +84,22 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
         cgl_t, cgl_w, cgl_l = "镀锌實測厚度", "镀锌測寬度", "镀锌測長度"
         ccl_t, ccl_w, ccl_l = "實測厚度", "實測寬度", "實測長度"
 
-        # Tên cột tiếng Anh sau khi đã bị ép về chữ thường và xóa khoảng trắng
         outer_cut = "outercutlength"
         inner_cut = "innercutlength"
 
         try:
-            # Kiểm tra xem cột đã tồn tại chưa, nếu chưa mới gán 0
             for col in [outer_cut, inner_cut]:
                 if col not in df.columns:
                     st.warning(f"Cảnh báo: Không tìm thấy cột '{col}' trong dữ liệu. Hãy kiểm tra lại tên cột trên Google Sheet.")
                     df[col] = 0
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
-            # Gom nhóm theo Cuộn Mẹ (Dùng 'max' để quét được số cắt phế liệu nhập ở bất kỳ dòng nào)
             s1 = df.groupby([order_c, mother_c]).agg({
                 cgl_t: 'mean', cgl_w: 'mean', cgl_l: 'first',
                 ccl_t: 'mean', ccl_w: 'mean', ccl_l: 'sum',
                 outer_cut: 'max', inner_cut: 'max' 
             }).reset_index()
 
-            # Tổng hợp theo đơn hàng (Dùng 'sum' vì mỗi cuộn mẹ có số cắt phế liệu riêng biệt)
             summary = s1.groupby(order_c).agg({
                 mother_c: 'count', cgl_l: 'sum', ccl_l: 'sum', 
                 outer_cut: 'sum', inner_cut: 'sum',
@@ -113,7 +108,6 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
 
             summary = summary.rename(columns={mother_c: 'Qty', cgl_l: 'In_m', ccl_l: 'Out_m'})
             
-            # Công thức tính lại Diff
             summary['Total_Cut'] = summary[outer_cut] + summary[inner_cut]
             summary['Diff'] = summary['Out_m'] - (summary['In_m'] - summary['Total_Cut'])
             summary['Thick_Var'] = summary[ccl_t] - summary[cgl_t]
@@ -130,6 +124,10 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
 
             disp = summary[[order_c, 'Qty', 'In_m', 'Total_Cut', 'Out_m', 'Diff', 'Thick_Var', 'Area_m2']].copy()
             disp.columns = ['Order ID', 'Input Coil Number', 'Input (m)', 'Cut Scrap (m)', 'Output (m)', 'Diff (m)', 'Thick Var', 'Diff Area (m²)']
+            
+            # --- CẢI TIẾN TẠI ĐÂY: Sắp xếp bảng từ lớn đến bé theo Mã đơn hàng (Order ID) ---
+            disp = disp.sort_values(by='Order ID', ascending=False).reset_index(drop=True)
+            
             disp['Input Coil Number'] = disp['Input Coil Number'].astype(int)
             disp.insert(0, 'No.', range(1, len(disp) + 1))
             
@@ -143,7 +141,13 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
             st.subheader("2. Production Coil Details") 
             
             order_list = df[order_c].unique()
-            sel_order = st.selectbox("Select Order ID to view details:", options=order_list)
+            
+            sel_order = st.selectbox(
+                "🔍 Type or Select Order ID to view details:", 
+                options=order_list,
+                index=None,
+                placeholder="Ex: P240801... (Click and type here to search)"
+            )
             
             if sel_order:
                 det = df[df[order_c] == sel_order].copy()
@@ -186,18 +190,15 @@ if GSHEET_URL and GSHEET_URL != "CHÈN_LINK_GOOGLE_SHEET_CỦA_BẠN_VÀO_ĐÂY"
             st.divider()
             st.subheader("3. Visual Insights & Analysis")
             
-            # Biểu đồ 1: Area Diff
             f1 = px.bar(disp, x='Order ID', y='Diff Area (m²)', color='Diff (m)', 
                         color_continuous_scale='RdBu', title="Extra Area per Order")
             st.plotly_chart(f1, use_container_width=True)
             st.info("**分析結論:** 監控各訂單的塗層面積偏差。偏離中心值的數據代表生產投入與產出不一致，建議優先核對該批次的生產日誌。")
 
-            # Biểu đồ 2: Production Variance
             f2 = px.histogram(disp, x='Diff (m)', nbins=15, title="Production Variance Distribution")
             st.plotly_chart(f2, use_container_width=True)
             st.warning("**分析結論:** 數據分布反映生產穩定性。離群值標示該訂單存在異常長度變化，需確認是物理延展、裁切損耗或是計量誤差。")
 
-            # Biểu đồ 3 (MỚI THÊM): Cut Scrap
             f3 = px.bar(disp, x='Order ID', y='Cut Scrap (m)', 
                         title="Total Cut Scrap per Order (Outer + Inner)",
                         color='Cut Scrap (m)', color_continuous_scale='Reds')
