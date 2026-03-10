@@ -12,14 +12,13 @@ st.set_page_config(page_title="Length Variance Analysis: Total CGL vs CCL per Or
 # ==========================================================
 GSHEET_URL = "https://docs.google.com/spreadsheets/d/1-kayrLVYwOO66Xxc7Vk7dbTNZ5Aph4MVd9DMTz6RJS0/edit?gid=0#gid=0"
 
-# --- MINIMALIST DESIGN: UNIFORM GRID LINES ---
+# --- STYLE ---
 st.markdown("""
 <style>
 .stApp { background-color: #ffffff; }
 div[data-testid="stVerticalBlock"] > div:has(div.stPlotlyChart),
 div[data-testid="stVerticalBlock"] > div:has(div.stTable) {
-    background-color: #ffffff; padding: 20px; border-radius: 0px;
-    margin-bottom: 20px; border: none;
+    background-color: #ffffff; padding: 20px; border-radius: 0px; margin-bottom: 20px; border: none;
 }
 h1, h2, h3 { color: #1e3a8a; font-family: 'Segoe UI', sans-serif; font-weight: 700 !important; }
 table { width: 100% !important; border-collapse: collapse !important; font-family: 'Segoe UI', sans-serif; color: #334155; border: 1px solid #e2e8f0 !important; }
@@ -85,30 +84,32 @@ if GSHEET_URL:
             df[ccl_l] = pd.to_numeric(df[ccl_l], errors='coerce')
 
             # ================================
-            # 3. INPUT_m theo logic 4 bước
+            # 3. CALC INPUT M
             # ================================
             def calc_input(group):
                 group = group.copy()
-                # Sort theo mother coil
                 mothers = group[mother_c].unique()
-                input_vals = []
+                result = []
                 for mother in mothers:
                     m_group = group[group[mother_c]==mother].copy()
-                    # Dòng đầu mother lấy CGL
-                    first_cgl = m_group[cgl_l].iloc[0]
-                    if pd.isna(first_cgl):
-                        # Nếu blank → lấy CCL
-                        first_cgl = m_group[ccl_l].iloc[0]
                     m_group["Input_m"] = 0
+
+                    # Dòng đầu mother coil → lấy CGL (hoặc CCL nếu blank)
+                    first_cgl = m_group[cgl_l].iloc[0]
+                    if pd.isna(first_cgl) or first_cgl==0:
+                        first_cgl = m_group[ccl_l].iloc[0]
                     m_group.loc[m_group.index[0], "Input_m"] = first_cgl
-                    # Orphan coils: nếu CGL blank & không phải mother gốc → Input = CCL
+
+                    # Các dòng còn lại
                     for idx in m_group.index[1:]:
+                        # Nếu CGL blank hoặc 0 → orphan → Input = CCL
                         if pd.isna(m_group.loc[idx, cgl_l]) or m_group.loc[idx, cgl_l]==0:
                             m_group.loc[idx, "Input_m"] = m_group.loc[idx, ccl_l]
                         else:
+                            # Split coil khác → 0
                             m_group.loc[idx, "Input_m"] = 0
-                    input_vals.append(m_group)
-                return pd.concat(input_vals)
+                    result.append(m_group)
+                return pd.concat(result)
 
             df = df.groupby([order_c, "Root_ID"], group_keys=False).apply(calc_input)
 
@@ -179,7 +180,7 @@ if GSHEET_URL:
             if sel_order:
                 det = df[df[order_c] == sel_order].copy()
                 det["Var"] = det[ccl_t] - det[cgl_t]
-                det_f = det[[mother_c, baby_c, cgl_t, cgl_w, cgl_l, ccl_t, ccl_w, "Var", ccl_l]].copy()
+                det_f = det[[mother_c, baby_c, cgl_t, cgl_w, cgl_l, ccl_t, ccl_w, "Var", ccl_l, "Input_m"]].copy()
                 det_f.columns = [
                     "Input Coil ID (CGL)",
                     "Output Coil ID (CCL)",
@@ -189,7 +190,8 @@ if GSHEET_URL:
                     "Output Thick (mm)",
                     "Output Width (mm)",
                     "Thick Deviation (mm)",
-                    "Output Length (m)"
+                    "Output Length (m)",
+                    "Input_m (m)"
                 ]
                 st.table(det_f.style.format({
                     "Input Thick (mm)": "{:.3f}",
@@ -198,7 +200,8 @@ if GSHEET_URL:
                     "Output Thick (mm)": "{:.3f}",
                     "Output Width (mm)": "{:,.0f}",
                     "Thick Deviation (mm)": "{:.3f}",
-                    "Output Length (m)": "{:,.0f}"
+                    "Output Length (m)": "{:,.0f}",
+                    "Input_m (m)": "{:,.0f}"
                 }))
 
             # ================================
@@ -264,3 +267,5 @@ Save as PDF Report
 
 else:
     st.info("Please insert the Google Sheet Link in the source code (GSHEET_URL).")
+
+
