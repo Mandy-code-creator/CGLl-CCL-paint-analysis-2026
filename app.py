@@ -316,18 +316,21 @@ if GSHEET_URL:
             # --- UI: EXECUTIVE SUMMARY ---
             st.subheader("4. Executive Summary")
 
-            # TÍNH TOÁN CÁC CHỈ SỐ CHO KẾT LUẬN
+            # CALCULATE METRICS FOR EXECUTIVE SUMMARY
             t_in = disp['Input (m)'].sum()
             t_out = disp['Output (m)'].sum()
+            t_cut = disp['Cut Scrap (m)'].sum()
             t_diff = disp['Diff (m)'].sum()
             avg_thick_var = disp['Thick Var'].mean()
             area_s = abs(disp[disp['Diff (m)'] < 0]['Diff Area (m²)'].sum())
             avg_yield = (disp['Theo Paint (kg)'].sum() / disp['Real Paint (kg)'].sum() * 100) if disp['Real Paint (kg)'].sum() > 0 else 0
 
-            # BỔ SUNG CHÊNH LỆCH KÍCH THƯỚC VÀO MARKDOWN
+            # UPDATED MARKDOWN WITH TOTAL CUT SCRAP
             st.markdown(f"""
-            **生產產出綜合分析 (Comprehensive Output Analysis):** * **總投入長度 (Total Input):** {t_in:,.0f} m  
+            **生產產出綜合分析 (Comprehensive Output Analysis):**
+            * **總投入長度 (Total Input):** {t_in:,.0f} m  
             * **總產出長度 (Total Output):** {t_out:,.0f} m  
+            * **總切廢長度 (Total Cut Scrap):** {t_cut:,.0f} m
             * **總長度差異 (Total Length Diff):** {t_diff:,.0f} m
             * **平均厚度差異 (Avg Thickness Var):** {avg_thick_var:.3f} mm
             * **不明面積差異 (Area Shortfall):** {area_s:,.2f} m² 
