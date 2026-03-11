@@ -313,7 +313,7 @@ if GSHEET_URL:
                 row_limit_summary = st.selectbox("Show rows:", options=[20, 50, 100, "All"], index=0, key="summary_rows")
 
             disp = summary[[order_c, 'Qty (Coils)', cgl_w, 'In_m', 'Total_Cut', 'Out_m', 'Diff', 'Area_m2', theo_paint_c, act_paint_c, 'Yield (%)', 'Scrap Loss (%)', 'Len Var Loss (%)', 'Other Causes (%)']].copy()
-            disp.columns = ['Order ID', 'Qty (Coils)', 'Input Width', 'Input (m)', 'Cut Scrap (m)', 'Output (m)', 'Diff (m)', 'Diff Area (m²)', 'Theo Paint (kg)', 'Act Paint (kg)', 'Yield (%)', 'Scrap Loss (%)', 'Len Var Loss (%)', 'Other Causes (%)']
+            disp.columns = ['Order ID', 'Qty (Coils)', 'Input Width', 'Input (m)', 'Cut Scrap (m)', 'Output (m)', 'Diff (m)', 'Diff Area (m²)', 'Theo Paint (kg)', 'Real Paint (kg)', 'Yield (%)', 'Scrap Loss (%)', 'Len Var Loss (%)', 'Other Causes (%)']
             disp = disp.sort_values(by='Cut Scrap (m)', ascending=False).reset_index(drop=True)
             disp.insert(0, 'No.', range(1, len(disp) + 1))
 
