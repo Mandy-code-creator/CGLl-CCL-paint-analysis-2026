@@ -332,7 +332,7 @@ if GSHEET_URL:
                     "Diff (m)": "{:,.0f}", 
                     "Diff Area (m²)": "{:,.0f}",
                     "Theo Paint (kg)": "{:,.2f}",
-                    "Act Paint (kg)": "{:,.2f}",
+                    "Real Paint (kg)": "{:,.2f}",
                     "Yield (%)": "{:.2f}%",
                     "Scrap Loss (%)": "{:.2f}%",
                     "Len Var Loss (%)": "{:.2f}%",
@@ -411,7 +411,7 @@ if GSHEET_URL:
 
             t_in, t_out = disp['Input (m)'].sum(), disp['Output (m)'].sum()
             area_s = abs(disp[disp['Diff (m)'] < 0]['Diff Area (m²)'].sum())
-            avg_yield = (disp['Theo Paint (kg)'].sum() / disp['Act Paint (kg)'].sum() * 100) if disp['Act Paint (kg)'].sum() > 0 else 0
+            avg_yield = (disp['Theo Paint (kg)'].sum() / disp['Act Paint (kg)'].sum() * 100) if disp['Real Paint (kg)'].sum() > 0 else 0
 
             st.markdown(f"**生產產出綜合分析:** \n* **總投入 (Total Input):** {t_in:,.0f} m  \n* **總產出 (Total Output):** {t_out:,.0f} m  \n* **不明面積差異 (Area Shortfall):** {area_s:,.2f} m² \n* **平均績效 (Avg Yield):** {avg_yield:.2f}%")
 
