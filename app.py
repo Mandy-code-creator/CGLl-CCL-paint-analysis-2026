@@ -180,6 +180,7 @@ if GSHEET_URL:
 
             # Level 1 Aggregation: Mother Coil
             s1 = df.groupby([order_c, mother_c]).agg({
+                line_c: 'first', # <--- THÊM line_c VÀO ĐÂY
                 cgl_t: 'mean', cgl_w: 'mean', cgl_l: 'first',
                 ccl_t: 'mean', ccl_w: 'mean', ccl_l: 'sum',
                 outer_cut: 'max', inner_cut: 'max',
@@ -188,6 +189,7 @@ if GSHEET_URL:
 
             # Level 2 Aggregation: Order Summary
             summary = s1.groupby(order_c).agg({
+                line_c: 'first', # <--- THÊM line_c VÀO ĐÂY
                 mother_c: 'count', cgl_l: 'sum', ccl_l: 'sum',
                 outer_cut: 'sum', inner_cut: 'sum',
                 ccl_t: 'mean', cgl_t: 'mean', cgl_w: 'mean',
@@ -229,8 +231,10 @@ if GSHEET_URL:
             with col2:
                 row_limit_summary = st.selectbox("Show rows:", options=[20, 50, 100, "All"], index=0, key="summary_rows")
 
-            disp = summary[[order_c, 'Qty (Coils)', cgl_w, 'In_m', 'Total_Cut', 'Out_m', 'Diff', 'Thick_Var', 'Area_m2', theo_paint_c, act_paint_c, 'Yield (%)', 'Scrap Loss (%)', 'Len Var Loss (%)', 'Other Causes (%)']].copy()
-            disp.columns = ['Order ID', 'Qty (Coils)', 'Input Width', 'Input (m)', 'Cut Scrap (m)', 'Output (m)', 'Diff (m)', 'Thick Var', 'Diff Area (m²)', 'Theo Paint (kg)', 'Real Paint (kg)', 'Yield (%)', 'Scrap Loss (%)', 'Len Var Loss (%)', 'Other Causes (%)']
+            # <--- THÊM line_c VÀO LIST COPY VÀ ĐỔI TÊN THÀNH 'Line' TRONG disp.columns
+            disp = summary[[order_c, line_c, 'Qty (Coils)', cgl_w, 'In_m', 'Total_Cut', 'Out_m', 'Diff', 'Thick_Var', 'Area_m2', theo_paint_c, act_paint_c, 'Yield (%)', 'Scrap Loss (%)', 'Len Var Loss (%)', 'Other Causes (%)']].copy()
+            disp.columns = ['Order ID', 'Line', 'Qty (Coils)', 'Input Width', 'Input (m)', 'Cut Scrap (m)', 'Output (m)', 'Diff (m)', 'Thick Var', 'Diff Area (m²)', 'Theo Paint (kg)', 'Real Paint (kg)', 'Yield (%)', 'Scrap Loss (%)', 'Len Var Loss (%)', 'Other Causes (%)']
+            
             disp = disp.sort_values(by='Cut Scrap (m)', ascending=False).reset_index(drop=True)
             disp.insert(0, 'No.', range(1, len(disp) + 1))
 
