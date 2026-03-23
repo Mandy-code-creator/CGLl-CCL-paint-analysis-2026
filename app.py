@@ -84,7 +84,7 @@ with col_title:
 with col_btn:
     st.write("") # Tạo khoảng trống để căn giữa nút với tiêu đề
     st.write("")
-    if st.button("🔄 Cập nhật dữ liệu mới", use_container_width=True):
+    if st.button("🔄 Restart", use_container_width=True):
         st.cache_data.clear() # Xóa bộ nhớ đệm (cache)
         st.rerun() # Tải lại toàn bộ trang ngay lập tức
 
