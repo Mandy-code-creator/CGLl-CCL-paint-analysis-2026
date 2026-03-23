@@ -75,7 +75,18 @@ h1, h2, h3 {{ color: {text_color}; font-family: 'Segoe UI', sans-serif; font-wei
 </style>
 """, unsafe_allow_html=True)
 
-st.title("Length Variance Analysis: Total CGL vs CCL per Order")
+# ==========================================================
+# HEADER & REFRESH BUTTON
+# ==========================================================
+col_title, col_btn = st.columns([8, 2])
+with col_title:
+    st.title("Length Variance Analysis: Total CGL vs CCL")
+with col_btn:
+    st.write("") # Tạo khoảng trống để căn giữa nút với tiêu đề
+    st.write("")
+    if st.button("🔄 Cập nhật dữ liệu mới", use_container_width=True):
+        st.cache_data.clear() # Xóa bộ nhớ đệm (cache)
+        st.rerun() # Tải lại toàn bộ trang ngay lập tức
 
 # ==========================================================
 # 2. DATA PROCESSING
