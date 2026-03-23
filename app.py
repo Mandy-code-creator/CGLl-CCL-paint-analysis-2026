@@ -11,7 +11,6 @@ st.set_page_config(page_title="Length Variance Analysis", layout="wide")
 # ==========================================================
 # UI IMPROVEMENT (CLEAN WHITE THEME)
 # ==========================================================
-# Global CSS settings
 st.markdown("""
 <style>
 html, body, [class*="css"]  {
@@ -50,7 +49,6 @@ div[data-testid="stAlert"], .js-plotly-plot { border-radius:10px; }
 </style>
 """, unsafe_allow_html=True)
 
-# Clean White Theme Configuration
 grad_colors = "#ffffff, #f8fafc, #f1f5f9, #ffffff"
 card_bg = "rgba(255, 255, 255, 0.95)"
 text_color = "#0f172a" 
@@ -90,6 +88,8 @@ st.title("Length Variance Analysis: Total CGL vs CCL per Order")
 # 2. DATA PROCESSING
 # ==========================================================
 GSHEET_URL = "https://docs.google.com/spreadsheets/d/1-kayrLVYwOO66Xxc7Vk7dbTNZ5Aph4MVd9DMTz6RJS0/edit?gid=0#gid=0"
+# LINK DỮ LIỆU SỐ MÉT TRẢ VỀ
+RETURN_GSHEET_URL = "https://docs.google.com/spreadsheets/d/1w1ob2a4lLa6vo-eJZVt4wtPUqQ1gECjNshkOtsrk51Y/edit?gid=0#gid=0"
 
 @st.cache_data(ttl=300)
 def load_auto_data(url):
@@ -101,6 +101,7 @@ def load_auto_data(url):
                 gid = url.split("gid=")[1].split("&")[0]
             csv_url = f"{base_url}/export?format=csv&gid={gid}"
             df = pd.read_csv(csv_url)
+            # Chuẩn hóa tên cột: bỏ khoảng trắng, in thường
             df.columns = df.columns.astype(str).str.strip().str.lower().str.replace(r'\s+', '', regex=True)
             return df
         return None
@@ -108,32 +109,47 @@ def load_auto_data(url):
         st.error(f"Connection Error: {e}")
         return None
 
+def get_col(default, possible_names, dataframe):
+    for name in possible_names:
+        if name in dataframe.columns:
+            return name
+    return default
+
 if GSHEET_URL:
     df = load_auto_data(GSHEET_URL)
-    if df is not None:
-        def get_col(default, possible_names):
-            for name in possible_names:
-                if name in df.columns:
-                    return name
-            return default
+    df_return = load_auto_data(RETURN_GSHEET_URL) # Load dữ liệu trả về
 
-        # Column mapping
-        order_c = get_col("訂單號碼", ["訂單號碼", "订单号码"])
-        mother_c = get_col("投入鋼捲號碼", ["投入鋼捲號碼", "投入钢卷号码"])
-        baby_c = get_col("產出鋼捲號碼", ["產出鋼捲號碼", "产出钢卷号码"])
-        cgl_l = get_col("镀锌測長度", ["镀锌測長度", "镀锌實測長度", "镀锌长度", "鍍鋅測長度"])
-        ccl_l = get_col("實測長度", ["實測長度", "实测长度"])
-        cgl_w = get_col("镀锌測寬度", ["镀锌測寬度", "镀锌測寬", "镀锌宽度", "鍍鋅測寬度", "镀锌实测宽度"])
-        cgl_t = get_col("镀锌實測厚度", ["镀锌實測厚度", "镀锌測厚", "镀锌厚度", "鍍鋅實測厚度"])
-        ccl_w = get_col("實測寬度", ["實測寬度", "实测宽度"])
-        ccl_t = get_col("實測厚度", ["實測厚度", "实测厚度"])
-        outer_cut = get_col("outercutlength", ["outercutlength", "outercut"])
-        inner_cut = get_col("innercutlength", ["innercutlength", "innercut"])
-        line_c = get_col("線別", ["線別", "线别"])
-        out_grade_c = get_col("產出等級", ["產出等級", "产出等级"])
-        next_proc_c = get_col("下製程", ["下製程", "下制程"])
-        theo_paint_c = get_col("合計理論耗用", ["合計理論耗用", "合计理论耗用", "理論耗用", "理论耗用"])
-        act_paint_c = get_col("合計實際耗用", ["合計實際耗用", "合计实际耗用", "實際耗用", "实际耗用"])
+    if df is not None:
+        # --- Cột cho df chính ---
+        order_c = get_col("訂單號碼", ["訂單號碼", "订单号码"], df)
+        mother_c = get_col("投入鋼捲號碼", ["投入鋼捲號碼", "投入钢卷号码"], df)
+        baby_c = get_col("產出鋼捲號碼", ["產出鋼捲號碼", "产出钢卷号码"], df)
+        cgl_l = get_col("镀锌測長度", ["镀锌測長度", "镀锌實測長度", "镀锌长度", "鍍鋅測長度"], df)
+        ccl_l = get_col("實測長度", ["實測長度", "实测长度"], df)
+        cgl_w = get_col("镀锌測寬度", ["镀锌測寬度", "镀锌測寬", "镀锌宽度", "鍍鋅測寬度", "镀锌实测宽度"], df)
+        cgl_t = get_col("镀锌實測厚度", ["镀锌實測厚度", "镀锌測厚", "镀锌厚度", "鍍鋅實測厚度"], df)
+        ccl_w = get_col("實測寬度", ["實測寬度", "实测宽度"], df)
+        ccl_t = get_col("實測厚度", ["實測厚度", "实测厚度"], df)
+        outer_cut = get_col("outercutlength", ["outercutlength", "outercut"], df)
+        inner_cut = get_col("innercutlength", ["innercutlength", "innercut"], df)
+        line_c = get_col("線別", ["線別", "线别"], df)
+        out_grade_c = get_col("產出等級", ["產出等級", "产出等级"], df)
+        next_proc_c = get_col("下製程", ["下製程", "下制程"], df)
+        theo_paint_c = get_col("合計理論耗用", ["合計理論耗用", "合计理论耗用", "理論耗用", "理论耗用"], df)
+        act_paint_c = get_col("合計實際耗用", ["合計實際耗用", "合计实际耗用", "實際耗用", "实际耗用"], df)
+
+        # --- Cột cho df_return (File trả về) ---
+        return_data_dict = {}
+        if df_return is not None:
+            ret_order_c = get_col("訂單號碼", ["訂單號碼", "订单号码", "orderid", "order"], df_return)
+            # Tìm cột số mét trả về (Cập nhật danh sách này nếu tên cột trong file của bạn khác)
+            ret_len_c = get_col("退回長度", ["退回長度", "退回长度", "returnlength", "trảvề", "sốméttrảvề", "return_m", "退料長度", "chiềudàitrảvề", "méttrảvề"], df_return)
+            
+            if ret_len_c in df_return.columns and ret_order_c in df_return.columns:
+                df_return[ret_len_c] = pd.to_numeric(df_return[ret_len_c], errors='coerce').fillna(0)
+                # Gom nhóm số mét trả về theo từng đơn hàng (Order ID)
+                return_grouped = df_return.groupby(ret_order_c)[ret_len_c].sum().to_dict()
+                return_data_dict = return_grouped
 
         try:
             # Data cleaning
@@ -180,7 +196,7 @@ if GSHEET_URL:
 
             # Level 1 Aggregation: Mother Coil
             s1 = df.groupby([order_c, mother_c]).agg({
-                line_c: 'first', # <--- THÊM line_c VÀO ĐÂY
+                line_c: 'first',
                 cgl_t: 'mean', cgl_w: 'mean', cgl_l: 'first',
                 ccl_t: 'mean', ccl_w: 'mean', ccl_l: 'sum',
                 outer_cut: 'max', inner_cut: 'max',
@@ -189,7 +205,7 @@ if GSHEET_URL:
 
             # Level 2 Aggregation: Order Summary
             summary = s1.groupby(order_c).agg({
-                line_c: 'first', # <--- THÊM line_c VÀO ĐÂY
+                line_c: 'first',
                 mother_c: 'count', cgl_l: 'sum', ccl_l: 'sum',
                 outer_cut: 'sum', inner_cut: 'sum',
                 ccl_t: 'mean', cgl_t: 'mean', cgl_w: 'mean',
@@ -197,20 +213,28 @@ if GSHEET_URL:
             }).reset_index()
 
             summary = summary.rename(columns={mother_c: 'Qty (Coils)', cgl_l: 'In_m', ccl_l: 'Out_m'})
+            
+            # --- MAP SỐ MÉT TRẢ VỀ VÀO BẢNG TỔNG HỢP ---
+            # Gắn số mét trả về từ file 2 vào từng đơn hàng. Nếu không có thì gán = 0
+            summary['Return_m'] = summary[order_c].map(return_data_dict).fillna(0)
+            
+            # --- CẬP NHẬT CÔNG THỨC DIFF ---
             summary['Total_Cut'] = summary[outer_cut] + summary[inner_cut]
-            summary['Diff'] = summary['Out_m'] - (summary['In_m'] - summary['Total_Cut'])
+            # Diff mới = (Đầu ra + Trả về) - (Đầu vào - Cắt phế)
+            summary['Diff'] = (summary['Out_m'] + summary['Return_m']) - (summary['In_m'] - summary['Total_Cut'])
+            
             summary['Thick_Var'] = summary[ccl_t] - summary[cgl_t]
             summary['Area_m2'] = (summary[cgl_w] / 1000) * summary['Diff']
 
-            # Variance Breakdown Calculation
+            # Variance Breakdown Calculation (Lưu ý: paint tính theo Out_m, bỏ qua hàng trả về)
             def calc_variance_breakdown(row):
                 act_paint = row[act_paint_c]
                 if act_paint <= 0: return pd.Series([0, 0, 0, 0])
                 
                 theo_paint = row[theo_paint_c]
-                out_m = row['Out_m']
+                out_m = row['Out_m'] # Dùng Out_m thật (không gồm trả về) để tính Yield
                 cut_scrap = row['Total_Cut']
-                diff = row['Diff']
+                diff = row['Diff'] # Diff đã bù trừ hàng trả về
                 
                 yield_pct = (theo_paint / act_paint) * 100
                 dinh_muc = (theo_paint / out_m) if out_m > 0 else 0
@@ -231,9 +255,9 @@ if GSHEET_URL:
             with col2:
                 row_limit_summary = st.selectbox("Show rows:", options=[20, 50, 100, "All"], index=0, key="summary_rows")
 
-            # <--- THÊM line_c VÀO LIST COPY VÀ ĐỔI TÊN THÀNH 'Line' TRONG disp.columns
-            disp = summary[[order_c, line_c, 'Qty (Coils)', cgl_w, 'In_m', 'Total_Cut', 'Out_m', 'Diff', 'Thick_Var', 'Area_m2', theo_paint_c, act_paint_c, 'Yield (%)', 'Scrap Loss (%)', 'Len Var Loss (%)', 'Other Causes (%)']].copy()
-            disp.columns = ['Order ID', 'Line', 'Qty (Coils)', 'Input Width', 'Input (m)', 'Cut Scrap (m)', 'Output (m)', 'Diff (m)', 'Thick Var', 'Diff Area (m²)', 'Theo Paint (kg)', 'Real Paint (kg)', 'Yield (%)', 'Scrap Loss (%)', 'Len Var Loss (%)', 'Other Causes (%)']
+            # Thêm 'Return_m' vào bảng hiển thị
+            disp = summary[[order_c, line_c, 'Qty (Coils)', cgl_w, 'In_m', 'Total_Cut', 'Return_m', 'Out_m', 'Diff', 'Thick_Var', 'Area_m2', theo_paint_c, act_paint_c, 'Yield (%)', 'Scrap Loss (%)', 'Len Var Loss (%)', 'Other Causes (%)']].copy()
+            disp.columns = ['Order ID', 'Line', 'Qty (Coils)', 'Input Width', 'Input (m)', 'Cut Scrap (m)', 'Return (m)', 'Output (m)', 'Diff (m)', 'Thick Var', 'Diff Area (m²)', 'Theo Paint (kg)', 'Real Paint (kg)', 'Yield (%)', 'Scrap Loss (%)', 'Len Var Loss (%)', 'Other Causes (%)']
             
             disp = disp.sort_values(by='Cut Scrap (m)', ascending=False).reset_index(drop=True)
             disp.insert(0, 'No.', range(1, len(disp) + 1))
@@ -246,7 +270,8 @@ if GSHEET_URL:
             st.dataframe(
                 disp_view.set_index('No.').style.format({
                     "Input Width": "{:,.0f}", "Input (m)": "{:,.0f}", "Cut Scrap (m)": "{:,.0f}", 
-                    "Output (m)": "{:,.0f}", "Diff (m)": "{:,.0f}", "Thick Var": "{:.3f}", "Diff Area (m²)": "{:,.0f}",
+                    "Return (m)": "{:,.0f}", "Output (m)": "{:,.0f}", "Diff (m)": "{:,.0f}", 
+                    "Thick Var": "{:.3f}", "Diff Area (m²)": "{:,.0f}",
                     "Theo Paint (kg)": "{:,.2f}", "Real Paint (kg)": "{:,.2f}",
                     "Yield (%)": "{:.2f}%", "Scrap Loss (%)": "{:.2f}%",
                     "Len Var Loss (%)": "{:.2f}%", "Other Causes (%)": "{:.2f}%"
@@ -306,14 +331,13 @@ if GSHEET_URL:
             )
             fig_breakdown.update_layout(barmode='stack')
             st.plotly_chart(fig_breakdown, use_container_width=True)
-            st.info("**分析結論:** 塗料耗用差異分析 (Variance Breakdown)。顯示各訂單中，實際塗料耗用的結構比例。綠色為有效產出 (Yield)，紅色為切廢料損耗 (Scrap Loss)，橘色為長度短缺損耗 (Length Variance Loss)，灰色為未明原因或其他耗損 (Other Causes)。")
+            st.info("**分析結論:** 塗料耗用差異分析 (Variance Breakdown)。顯示各訂單中，實際塗料耗用的結構比例。")
 
             st.plotly_chart(px.bar(disp_view, x='Order ID', y='Diff Area (m²)', color='Diff (m)', color_continuous_scale='Tealgrn', title="Extra Area per Order", template=plotly_template), use_container_width=True)
             st.info("**分析結論:** 監控各訂單的塗層面積偏差。偏離中心值的數據代表生產投入與產出不一致，建議優先核對該批次的生產日誌。")
 
             st.plotly_chart(px.bar(disp_view.sort_values(by='Cut Scrap (m)', ascending=False), x='Order ID', y='Cut Scrap (m)', 
                            title="Total Cut Scrap per Order (Outer + Inner)", color='Cut Scrap (m)', color_continuous_scale='Reds', template=plotly_template), use_container_width=True)
-            st.error("**分析結論:** 各訂單的剪切廢料總量。監控此數據有助於評估來料質量與生產初期的裁切損耗。若數值異常偏高，需檢查鋼捲頭尾品質狀況。")
 
             st.divider()
 
@@ -324,22 +348,24 @@ if GSHEET_URL:
             t_in = disp['Input (m)'].sum()
             t_out = disp['Output (m)'].sum()
             t_cut = disp['Cut Scrap (m)'].sum()
+            t_return = disp['Return (m)'].sum()
             t_diff = disp['Diff (m)'].sum()
             avg_thick_var = disp['Thick Var'].mean()
             area_s = abs(disp[disp['Diff (m)'] < 0]['Diff Area (m²)'].sum())
             avg_yield = (disp['Theo Paint (kg)'].sum() / disp['Real Paint (kg)'].sum() * 100) if disp['Real Paint (kg)'].sum() > 0 else 0
 
-            # UPDATED MARKDOWN WITH TOTAL CUT SCRAP
+            # UPDATED MARKDOWN WITH RETURN METERS
             st.markdown(f"""
             **生產產出綜合分析 (Comprehensive Output Analysis):**
             * **總投入長度 (Total Input):** {t_in:,.0f} m  
             * **總產出長度 (Total Output):** {t_out:,.0f} m  
+            * **總退回長度 (Total Returned):** <span style="color:blue; font-weight:bold;">{t_return:,.0f} m</span>
             * **總切廢長度 (Total Cut Scrap):** {t_cut:,.0f} m
-            * **總長度差異 (Total Length Diff):** {t_diff:,.0f} m
+            * **總長度差異 (Total Length Diff):** <span style="color:red; font-weight:bold;">{t_diff:,.0f} m</span> *(Đã bù trừ hàng trả về)*
             * **平均厚度差異 (Avg Thickness Var):** {avg_thick_var:.3f} mm
             * **不明面積差異 (Area Shortfall):** {area_s:,.2f} m² 
             * **平均績效 (Avg Yield):** {avg_yield:.2f}%
-            """)
+            """, unsafe_allow_html=True)
 
             st.subheader("5. Export Data")
 
