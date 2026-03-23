@@ -141,9 +141,11 @@ if GSHEET_URL:
         # --- Cột cho df_return (File trả về) ---
         return_data_dict = {}
         if df_return is not None:
-            ret_order_c = get_col("訂單號碼", ["訂單號碼", "订单号码", "orderid", "order"], df_return)
-            # Tìm cột số mét trả về (Cập nhật danh sách này nếu tên cột trong file của bạn khác)
-            ret_len_c = get_col("退回長度", ["退回長度", "退回长度", "returnlength", "trảvề", "sốméttrảvề", "return_m", "退料長度", "chiềudàitrảvề", "méttrảvề"], df_return)
+            # Code tìm cột đã được tự động làm sạch (viết thường, không khoảng trắng)
+            ret_order_c = get_col("ordernumber", ["ordernumber"], df_return)
+            
+            # Khai báo chính xác tên cột chứa số mét trả về sau khi làm sạch
+            ret_len_c = get_col("qualityclass7mlength", ["qualityclass7mlength"], df_return)
             
             if ret_len_c in df_return.columns and ret_order_c in df_return.columns:
                 df_return[ret_len_c] = pd.to_numeric(df_return[ret_len_c], errors='coerce').fillna(0)
