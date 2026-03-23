@@ -3,7 +3,7 @@ import pandas as pd
 import plotly.express as px
 import io
 import re
-import numpy as np # Import numpy for weighted average
+import numpy as np
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="Length Variance Analysis", layout="wide")
@@ -192,7 +192,6 @@ if GSHEET_URL:
             df[cgl_w] = df.groupby(['clean_order', 'base_coil'])[cgl_w].transform(lambda x: x.replace(0, pd.NA).ffill().bfill()).fillna(0)
 
             # WEIGHTED THICKNESS CALCULATION AT MOTHER COIL LEVEL
-            # We calculate variance = CCL Thickness - CGL Thickness, weighted by Output Length
             df['Thick_Var_Coil'] = df[ccl_t] - df[cgl_t]
             df['Thick_Weight'] = df['Thick_Var_Coil'] * df[ccl_l]
 
@@ -202,7 +201,7 @@ if GSHEET_URL:
                 ccl_t: 'mean', ccl_w: 'mean', ccl_l: 'sum',
                 outer_cut: 'max', inner_cut: 'max',
                 theo_paint_c: 'max', act_paint_c: 'max',
-                'Thick_Weight': 'sum', # Aggregate weighted variance
+                'Thick_Weight': 'sum', 
                 order_c: 'first' 
             }).reset_index()
 
@@ -213,18 +212,19 @@ if GSHEET_URL:
                 outer_cut: 'sum', inner_cut: 'sum',
                 cgl_w: 'mean',
                 theo_paint_c: 'max', act_paint_c: 'max',
-                'Thick_Weight': 'sum' # Aggregate weighted variance at order level
+                'Thick_Weight': 'sum' 
             }).reset_index()
 
             summary = summary.rename(columns={mother_c: 'Qty (Coils)', cgl_l: 'In_m', ccl_l: 'Out_m'})
             
             summary['Return_m'] = summary['clean_order'].map(return_data_dict).fillna(0)
             
+            # MASS BALANCE CALCULATION
             summary['Total_Cut'] = summary[outer_cut] + summary[inner_cut]
-            summary['Diff'] = (summary['Out_m'] + summary['Return_m']) - (summary['In_m'] - summary['Total_Cut'])
+            # Diff = Input - (Output + Return + Cut)
+            summary['Diff'] = summary['In_m'] - (summary['Out_m'] + summary['Return_m'] + summary['Total_Cut'])
             
             # CALCULATE WEIGHTED AVERAGE THICKNESS VARIANCE
-            # Weighted Thick Var = Sum(Thick_Var * Out_m) / Sum(Out_m)
             summary['Thick_Var'] = np.where(summary['Out_m'] > 0, summary['Thick_Weight'] / summary['Out_m'], 0)
             
             summary['Area_m2'] = (summary[cgl_w] / 1000) * summary['Diff']
@@ -241,7 +241,9 @@ if GSHEET_URL:
                 yield_pct = (theo_paint / act_paint) * 100
                 dinh_muc = (theo_paint / out_m) if out_m > 0 else 0
                 scrap_loss = (cut_scrap * dinh_muc) / act_paint * 100
-                len_loss = (abs(diff) * dinh_muc) / act_paint * 100 if diff < 0 else 0
+                
+                # Loss happens when diff > 0
+                len_loss = (abs(diff) * dinh_muc) / act_paint * 100 if diff > 0 else 0
                 
                 other_loss = 100 - yield_pct - scrap_loss - len_loss
                 if other_loss < 0: other_loss = 0
@@ -353,7 +355,7 @@ if GSHEET_URL:
             total_thick_weight = summary['Thick_Weight'].sum()
             avg_thick_var = (total_thick_weight / t_out) if t_out > 0 else 0
 
-            area_s = abs(disp[disp['Diff (m)'] < 0]['Diff Area (m²)'].sum())
+            area_s = abs(disp[disp['Diff (m)'] > 0]['Diff Area (m²)'].sum())
             avg_yield = (disp['Theo Paint (kg)'].sum() / disp['Real Paint (kg)'].sum() * 100) if disp['Real Paint (kg)'].sum() > 0 else 0
 
             st.markdown(f"""
