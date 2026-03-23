@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.express as px
 import io
 import re
+import numpy as np # Import numpy for weighted average
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="Length Variance Analysis", layout="wide")
@@ -82,11 +83,11 @@ col_title, col_btn = st.columns([8, 2])
 with col_title:
     st.title("Length Variance Analysis: Total CGL vs CCL")
 with col_btn:
-    st.write("") # Tạo khoảng trống để căn giữa nút với tiêu đề
+    st.write("") 
     st.write("")
-    if st.button("🔄 Restart", use_container_width=True):
-        st.cache_data.clear() # Xóa bộ nhớ đệm (cache)
-        st.rerun() # Tải lại toàn bộ trang ngay lập tức
+    if st.button("🔄 Restart Data", use_container_width=True):
+        st.cache_data.clear() 
+        st.rerun() 
 
 # ==========================================================
 # 2. DATA PROCESSING
@@ -104,7 +105,6 @@ def load_auto_data(url):
                 gid = url.split("gid=")[1].split("&")[0]
             csv_url = f"{base_url}/export?format=csv&gid={gid}"
             df = pd.read_csv(csv_url)
-            # Chuẩn hóa tên cột: bỏ khoảng trắng, in thường
             df.columns = df.columns.astype(str).str.strip().str.lower().str.replace(r'\s+', '', regex=True)
             return df
         return None
@@ -123,7 +123,6 @@ if GSHEET_URL:
     df_return = load_auto_data(RETURN_GSHEET_URL)
 
     if df is not None:
-        # Cột cho df chính
         order_c = get_col("訂單號碼", ["訂單號碼", "订单号码"], df)
         mother_c = get_col("投入鋼捲號碼", ["投入鋼捲號碼", "投入钢卷号码"], df)
         baby_c = get_col("產出鋼捲號碼", ["產出鋼捲號碼", "产出钢卷号码"], df)
@@ -141,26 +140,20 @@ if GSHEET_URL:
         theo_paint_c = get_col("合計理論耗用", ["合計理論耗用", "合计理论耗用", "理論耗用", "理论耗用"], df)
         act_paint_c = get_col("合計實際耗用", ["合計實際耗用", "合计实际耗用", "實際耗用", "实际耗用"], df)
 
-        # --- XỬ LÝ DỮ LIỆU TRẢ VỀ (TỪ FILE 2) ---
+        # --- RETURN DATA PROCESSING ---
         return_data_dict = {}
         if df_return is not None:
             ret_order_c = get_col("ordernumber", ["ordernumber", "order_number", "訂單號碼"], df_return)
             ret_len_c = get_col("qualityclass7mlength", ["qualityclass7mlength", "退回長度", "returnlength"], df_return)
             
             if ret_len_c in df_return.columns and ret_order_c in df_return.columns:
-                # Ép kiểu số cho cột chiều dài
                 df_return[ret_len_c] = pd.to_numeric(df_return[ret_len_c], errors='coerce').fillna(0)
-                # CHUẨN HÓA MÃ ĐƠN HÀNG FILE TRẢ VỀ: Bỏ khoảng trắng 2 đầu và in hoa
                 df_return['clean_order'] = df_return[ret_order_c].astype(str).str.strip().str.upper()
-                
-                # Gom nhóm số mét theo mã đơn hàng đã chuẩn hóa
                 return_data_dict = df_return.groupby('clean_order')[ret_len_c].sum().to_dict()
 
         try:
-            # CHUẨN HÓA MÃ ĐƠN HÀNG FILE CHÍNH: Bỏ khoảng trắng 2 đầu và in hoa để MAP chính xác
             df['clean_order'] = df[order_c].astype(str).str.strip().str.upper()
 
-            # Data cleaning
             for col in [line_c, out_grade_c, next_proc_c]:
                 if col not in df.columns:
                     df[col] = "-"
@@ -171,11 +164,9 @@ if GSHEET_URL:
                     df[col] = 0
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
-            # Deduplicate for first baby coil
             df['is_first_baby'] = ~df.duplicated(subset=['clean_order', baby_c], keep='first')
             df[ccl_l] = df.apply(lambda r: r[ccl_l] if r['is_first_baby'] else 0, axis=1)
 
-            # Family mapping
             df['base_coil'] = df[mother_c].astype(str).str[:-3]
             df['is_x00'] = df[mother_c].astype(str).str.endswith('X00', na=False)
             df['family_has_x00'] = df.groupby(['clean_order', 'base_coil'])['is_x00'].transform('any')
@@ -183,7 +174,6 @@ if GSHEET_URL:
             df['is_first_mother'] = ~df.duplicated(subset=['clean_order', mother_c])
             df['sum_ccl_by_mother'] = df.groupby(['clean_order', mother_c])[ccl_l].transform('sum')
 
-            # Input resolution logic
             def resolve_input(row):
                 if not row['is_first_mother']: return 0
                 if row[cgl_l] > 0:
@@ -198,44 +188,47 @@ if GSHEET_URL:
             df[outer_cut] = df.apply(lambda r: r[outer_cut] if r['is_first_mother'] else 0, axis=1)
             df[inner_cut] = df.apply(lambda r: r[inner_cut] if r['is_first_mother'] else 0, axis=1)
 
-            # Forward/Backward fill for parameters
             df[cgl_t] = df.groupby(['clean_order', 'base_coil'])[cgl_t].transform(lambda x: x.replace(0, pd.NA).ffill().bfill()).fillna(0)
             df[cgl_w] = df.groupby(['clean_order', 'base_coil'])[cgl_w].transform(lambda x: x.replace(0, pd.NA).ffill().bfill()).fillna(0)
 
-            # Level 1 Aggregation: Mother Coil
+            # WEIGHTED THICKNESS CALCULATION AT MOTHER COIL LEVEL
+            # We calculate variance = CCL Thickness - CGL Thickness, weighted by Output Length
+            df['Thick_Var_Coil'] = df[ccl_t] - df[cgl_t]
+            df['Thick_Weight'] = df['Thick_Var_Coil'] * df[ccl_l]
+
             s1 = df.groupby(['clean_order', mother_c]).agg({
                 line_c: 'first',
                 cgl_t: 'mean', cgl_w: 'mean', cgl_l: 'first',
                 ccl_t: 'mean', ccl_w: 'mean', ccl_l: 'sum',
                 outer_cut: 'max', inner_cut: 'max',
                 theo_paint_c: 'max', act_paint_c: 'max',
-                order_c: 'first' # Giữ lại tên order gốc
+                'Thick_Weight': 'sum', # Aggregate weighted variance
+                order_c: 'first' 
             }).reset_index()
 
-            # Level 2 Aggregation: Order Summary
             summary = s1.groupby('clean_order').agg({
                 order_c: 'first',
                 line_c: 'first',
                 mother_c: 'count', cgl_l: 'sum', ccl_l: 'sum',
                 outer_cut: 'sum', inner_cut: 'sum',
-                ccl_t: 'mean', cgl_t: 'mean', cgl_w: 'mean',
-                theo_paint_c: 'max', act_paint_c: 'max'   
+                cgl_w: 'mean',
+                theo_paint_c: 'max', act_paint_c: 'max',
+                'Thick_Weight': 'sum' # Aggregate weighted variance at order level
             }).reset_index()
 
             summary = summary.rename(columns={mother_c: 'Qty (Coils)', cgl_l: 'In_m', ccl_l: 'Out_m'})
             
-            # --- MAP SỐ MÉT TRẢ VỀ TỪ TỪ ĐIỂN VÀO BẢNG TỔNG HỢP ---
             summary['Return_m'] = summary['clean_order'].map(return_data_dict).fillna(0)
             
-            # --- CẬP NHẬT CÔNG THỨC DIFF ---
             summary['Total_Cut'] = summary[outer_cut] + summary[inner_cut]
-            # Diff mới = (Đầu ra + Trả về) - (Đầu vào - Cắt phế)
             summary['Diff'] = (summary['Out_m'] + summary['Return_m']) - (summary['In_m'] - summary['Total_Cut'])
             
-            summary['Thick_Var'] = summary[ccl_t] - summary[cgl_t]
+            # CALCULATE WEIGHTED AVERAGE THICKNESS VARIANCE
+            # Weighted Thick Var = Sum(Thick_Var * Out_m) / Sum(Out_m)
+            summary['Thick_Var'] = np.where(summary['Out_m'] > 0, summary['Thick_Weight'] / summary['Out_m'], 0)
+            
             summary['Area_m2'] = (summary[cgl_w] / 1000) * summary['Diff']
 
-            # Variance Breakdown Calculation 
             def calc_variance_breakdown(row):
                 act_paint = row[act_paint_c]
                 if act_paint <= 0: return pd.Series([0, 0, 0, 0])
@@ -265,7 +258,7 @@ if GSHEET_URL:
                 row_limit_summary = st.selectbox("Show rows:", options=[20, 50, 100, "All"], index=0, key="summary_rows")
 
             disp = summary[[order_c, line_c, 'Qty (Coils)', cgl_w, 'In_m', 'Total_Cut', 'Return_m', 'Out_m', 'Diff', 'Thick_Var', 'Area_m2', theo_paint_c, act_paint_c, 'Yield (%)', 'Scrap Loss (%)', 'Len Var Loss (%)', 'Other Causes (%)']].copy()
-            disp.columns = ['Order ID', 'Line', 'Qty (Coils)', 'Input Width', 'Input (m)', 'Cut Scrap (m)', 'Return (m)', 'Output (m)', 'Diff (m)', 'Thick Var', 'Diff Area (m²)', 'Theo Paint (kg)', 'Real Paint (kg)', 'Yield (%)', 'Scrap Loss (%)', 'Len Var Loss (%)', 'Other Causes (%)']
+            disp.columns = ['Order ID', 'Line', 'Qty (Coils)', 'Input Width', 'Input (m)', 'Cut Scrap (m)', 'Return (m)', 'Output (m)', 'Diff (m)', 'Avg Thick Var', 'Diff Area (m²)', 'Theo Paint (kg)', 'Real Paint (kg)', 'Yield (%)', 'Scrap Loss (%)', 'Len Var Loss (%)', 'Other Causes (%)']
             
             disp = disp.sort_values(by='Cut Scrap (m)', ascending=False).reset_index(drop=True)
             disp.insert(0, 'No.', range(1, len(disp) + 1))
@@ -279,7 +272,7 @@ if GSHEET_URL:
                 disp_view.set_index('No.').style.format({
                     "Input Width": "{:,.0f}", "Input (m)": "{:,.0f}", "Cut Scrap (m)": "{:,.0f}", 
                     "Return (m)": "{:,.0f}", "Output (m)": "{:,.0f}", "Diff (m)": "{:,.0f}", 
-                    "Thick Var": "{:.3f}", "Diff Area (m²)": "{:,.0f}",
+                    "Avg Thick Var": "{:.3f}", "Diff Area (m²)": "{:,.0f}",
                     "Theo Paint (kg)": "{:,.2f}", "Real Paint (kg)": "{:,.2f}",
                     "Yield (%)": "{:.2f}%", "Scrap Loss (%)": "{:.2f}%",
                     "Len Var Loss (%)": "{:.2f}%", "Other Causes (%)": "{:.2f}%"
@@ -327,7 +320,7 @@ if GSHEET_URL:
                 disp_view, 
                 x='Order ID', 
                 y=['Yield (%)', 'Scrap Loss (%)', 'Len Var Loss (%)', 'Other Causes (%)'],
-                title="Paint Consumption Variance Breakdown / 塗料耗用差異分析",
+                title="Paint Consumption Variance Breakdown",
                 template=plotly_template,
                 labels={'value': 'Percentage (%)', 'variable': 'Category'},
                 color_discrete_map={
@@ -339,7 +332,6 @@ if GSHEET_URL:
             )
             fig_breakdown.update_layout(barmode='stack')
             st.plotly_chart(fig_breakdown, use_container_width=True)
-            st.info("**分析結論:** 塗料耗用差異分析 (Variance Breakdown)。顯示各訂單中，實際塗料耗用的結構比例。")
 
             st.plotly_chart(px.bar(disp_view, x='Order ID', y='Diff Area (m²)', color='Diff (m)', color_continuous_scale='Tealgrn', title="Extra Area per Order", template=plotly_template), use_container_width=True)
 
@@ -356,20 +348,24 @@ if GSHEET_URL:
             t_cut = disp['Cut Scrap (m)'].sum()
             t_return = disp['Return (m)'].sum()
             t_diff = disp['Diff (m)'].sum()
-            avg_thick_var = disp['Thick Var'].mean()
+            
+            # Weighted average thick var for executive summary
+            total_thick_weight = summary['Thick_Weight'].sum()
+            avg_thick_var = (total_thick_weight / t_out) if t_out > 0 else 0
+
             area_s = abs(disp[disp['Diff (m)'] < 0]['Diff Area (m²)'].sum())
             avg_yield = (disp['Theo Paint (kg)'].sum() / disp['Real Paint (kg)'].sum() * 100) if disp['Real Paint (kg)'].sum() > 0 else 0
 
             st.markdown(f"""
-            **生產產出綜合分析 (Comprehensive Output Analysis):**
-            * **總投入長度 (Total Input):** {t_in:,.0f} m  
-            * **總產出長度 (Total Output):** {t_out:,.0f} m  
-            * **總退回長度 (Total Returned):** <span style="color:blue; font-weight:bold;">{t_return:,.0f} m</span>
-            * **總切廢長度 (Total Cut Scrap):** {t_cut:,.0f} m
-            * **總長度差異 (Total Length Diff):** <span style="color:red; font-weight:bold;">{t_diff:,.0f} m</span> *(Đã bù trừ hàng trả về)*
-            * **平均厚度差異 (Avg Thickness Var):** {avg_thick_var:.3f} mm
-            * **不明面積差異 (Area Shortfall):** {area_s:,.2f} m² 
-            * **平均績效 (Avg Yield):** {avg_yield:.2f}%
+            **Comprehensive Output Analysis:**
+            * **Total Input:** {t_in:,.0f} m  
+            * **Total Output:** {t_out:,.0f} m  
+            * **Total Returned:** <span style="color:blue; font-weight:bold;">{t_return:,.0f} m</span>
+            * **Total Cut Scrap:** {t_cut:,.0f} m
+            * **Total Length Diff:** <span style="color:red; font-weight:bold;">{t_diff:,.0f} m</span> *(Returned meters accounted)*
+            * **Weighted Avg Thickness Var:** {avg_thick_var:.3f} mm
+            * **Area Shortfall:** {area_s:,.2f} m² 
+            * **Average Yield:** {avg_yield:.2f}%
             """, unsafe_allow_html=True)
 
             st.subheader("5. Export Data")
